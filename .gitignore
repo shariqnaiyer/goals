@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Generated Xcode project (regenerate with `xcodegen generate`)
+App/Goals.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Secrets / local config
+*.xcconfig.local
+Secrets.xcconfig
+.env
+
+# Node (proxy)
+proxy/node_modules/
+proxy/dist/
+proxy/.wrangler/
