@@ -56,7 +56,7 @@ enum Format {
         case .specificWeekdays:
             if rule.weekdays.count == 7 { return "Every day" }
             let names = rule.weekdays.sorted { $0.calendarWeekday < $1.calendarWeekday }
-                .map { $0.rawValue.prefix(3).capitalized }
+                .map(\.shortName)
             return names.joined(separator: ", ")
         case .timesPerWeek:
             return "\(rule.timesPerWeek)× per week"

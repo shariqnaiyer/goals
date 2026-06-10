@@ -179,15 +179,20 @@ public struct MockLLMService: LLMService {
     // MARK: - Heuristics
 
     private func derivedTitle(from text: String) -> String {
-        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = cleaned.lowercased()
         for prefix in ["i want to ", "i'd like to ", "i would like to ", "i want ", "help me "] {
             if lower.hasPrefix(prefix) {
-                let stripped = String(cleaned.dropFirst(prefix.count))
-                return stripped.prefix(1).capitalized + stripped.dropFirst()
+                cleaned = String(cleaned.dropFirst(prefix.count))
+                break
             }
         }
-        return cleaned.prefix(1).capitalized + cleaned.dropFirst()
+        return capitalizedFirst(cleaned)
+    }
+
+    private func capitalizedFirst(_ string: String) -> String {
+        guard let first = string.first else { return string }
+        return String(first).uppercased() + String(string.dropFirst())
     }
 
     private func parseRoughDate(_ text: String) -> String? {

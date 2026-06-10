@@ -1,0 +1,10 @@
+name = "goals-llm-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+# Set the Anthropic key as a secret, never in this file:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#
+# Then deploy:
+#   npm install && npm run deploy
+# and set LLM_PROXY_BASE_URL in the app's Secrets.xcconfig to the deployed URL.

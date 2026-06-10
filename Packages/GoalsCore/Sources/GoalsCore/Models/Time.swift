@@ -35,6 +35,12 @@ public enum Weekday: String, Codable, CaseIterable, Sendable, Hashable {
     }
 
     public var isWeekend: Bool { self == .saturday || self == .sunday }
+
+    /// Capitalised three-letter abbreviation, e.g. "Mon".
+    public var shortName: String {
+        let abbrev = String(rawValue.prefix(3))
+        return abbrev.prefix(1).uppercased() + abbrev.dropFirst()
+    }
 }
 
 /// A half-open span of minutes-from-midnight within a single day: `[start, end)`.
