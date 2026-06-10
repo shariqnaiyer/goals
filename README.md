@@ -2,8 +2,17 @@
 
 A native iOS app that acts as an intelligent, adaptive goals system: it turns vague aspirations into concrete plans through a friendly onboarding conversation, breaks goals into milestones and scheduled tasks, tracks progress via chat and a structured Today view, and renegotiates the plan based on how you're actually doing — while respecting constraints like work hours and sleep.
 
-See the full product and technical plan in **[docs/PLAN.md](docs/PLAN.md)**, and
-build/run instructions in **[SETUP.md](SETUP.md)**.
+## Documentation
+
+- **[CLAUDE.md](CLAUDE.md)** — start here: map, build/verify commands,
+  invariants, and recipes (also auto-read by Claude Code; nested `CLAUDE.md`
+  files live in each subtree).
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — layering, modules, data-flow
+  walkthroughs, concurrency model.
+- **[docs/STATUS.md](docs/STATUS.md)** — what's done / stubbed / next, with a
+  prioritised backlog. **Pick up work here.**
+- **[docs/PLAN.md](docs/PLAN.md)** — the product & technical plan (the "why").
+- **[SETUP.md](SETUP.md)** — build & run instructions.
 
 ## Status
 
