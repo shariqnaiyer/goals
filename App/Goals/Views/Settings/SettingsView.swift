@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(AppContainer.self) private var app
     @State private var model: SettingsViewModel?
+    @State private var profile: UserProfile = UserProfile()
     @State private var showEraseConfirm = false
     @State private var exportDocument: JSONDocument?
     @State private var showExporter = false
@@ -16,16 +17,34 @@ struct SettingsView: View {
             Group {
                 if let model { form(model) } else { ProgressView() }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("You")
             .background(Palette.bgGrouped.ignoresSafeArea())
         }
-        .onAppear { if model == nil { model = SettingsViewModel(app: app) } }
+        .onAppear {
+            if model == nil { model = SettingsViewModel(app: app) }
+            profile = app.store.userProfile()
+        }
     }
 
     @ViewBuilder
     private func form(_ model: SettingsViewModel) -> some View {
         @Bindable var model = model
         Form {
+            if profile.person.isGrounded {
+                Section {
+                    profileRow("In a sentence", profile.person.oneLine)
+                    profileRow("A typical day", profile.person.dailyShape)
+                    if let energy = profile.person.energyPattern { profileRow("Energy", energy) }
+                    if let theme = profile.person.longTermTheme { profileRow("The bigger picture", theme) }
+                } header: {
+                    Text("What I understand about you")
+                } footer: {
+                    Text(profile.backlog.isEmpty
+                        ? "I keep this in mind when planning — and only ever send a summary to the coach, never your whole history."
+                        : "Plus \(profile.backlog.count) idea\(profile.backlog.count == 1 ? "" : "s") I'm holding for later.")
+                }
+            }
+
             Section("Your day") {
                 NavigationLink {
                     ConstraintEditorView(model: model)
@@ -83,6 +102,17 @@ struct SettingsView: View {
         }
         .fileExporter(isPresented: $showExporter, document: exportDocument,
                       contentType: .json, defaultFilename: "goals-export") { _ in }
+    }
+
+    /// One legible, second-person line of what the coach learned.
+    @ViewBuilder
+    private func profileRow(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(AppFont.caption1).tracking(0.4).foregroundStyle(Palette.textTertiary)
+            Text(value).font(AppFont.callout).foregroundStyle(Palette.textPrimary)
+        }
+        .padding(.vertical, 2)
     }
 }
 

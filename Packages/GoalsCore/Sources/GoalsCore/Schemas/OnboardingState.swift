@@ -140,7 +140,8 @@ public struct AspirationDraft: Identifiable, Codable, Sendable, Hashable {
                  weeklyBudgetMinutes: weeklyBudgetMinutes,
                  isComplete: true,
                  nextQuestion: nil,
-                 specifics: specifics)
+                 specifics: specifics,
+                 horizon: horizon)
     }
 }
 

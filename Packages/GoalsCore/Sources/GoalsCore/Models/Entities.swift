@@ -31,6 +31,13 @@ public struct Goal: Identifiable, Codable, Sendable, Hashable {
     /// named program + routines). Opaque to the Scheduler. Optional so legacy
     /// goals decode unchanged (docs/PLAN.md — concreteness).
     public var specifics: GoalSpecifics?
+    /// Whether this is a near-term goal being worked now or a long-term north
+    /// star captured for context. Optional for decode-safety; read via
+    /// `effectiveHorizon` (defaults to `.longTerm`).
+    public var horizon: GoalHorizon?
+    /// For a short-term goal, the long-term goal it advances. A self-link (not a
+    /// new aggregate) so the Scheduler/PlanEngine/repos stay single-shape.
+    public var parentGoalID: UUID?
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -42,7 +49,9 @@ public struct Goal: Identifiable, Codable, Sendable, Hashable {
                 createdAt: Date = Date(),
                 archivedReason: String? = nil,
                 weeklyBudgetMinutes: Int = 0,
-                specifics: GoalSpecifics? = nil) {
+                specifics: GoalSpecifics? = nil,
+                horizon: GoalHorizon? = nil,
+                parentGoalID: UUID? = nil) {
         self.id = id
         self.title = title
         self.motivationStatement = motivationStatement
@@ -54,7 +63,12 @@ public struct Goal: Identifiable, Codable, Sendable, Hashable {
         self.archivedReason = archivedReason
         self.weeklyBudgetMinutes = weeklyBudgetMinutes
         self.specifics = specifics
+        self.horizon = horizon
+        self.parentGoalID = parentGoalID
     }
+
+    /// The goal's horizon, defaulting legacy/unspecified goals to long-term.
+    public var effectiveHorizon: GoalHorizon { horizon ?? .longTerm }
 }
 
 // MARK: - Milestone

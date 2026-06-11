@@ -22,6 +22,51 @@ final class GoalSpecificsTests: XCTestCase {
         XCTAssertEqual(decoded.displayName, "Atomic Habits")
     }
 
+    func testFitnessSpecificsRoundTripsWithRoutines() throws {
+        let specifics = GoalSpecifics.fitness(
+            FitnessSpecifics(baseline: "sedentary", target: "run 5K", programName: "Couch to 5K",
+                             routines: [Routine(name: "Run A", exercises: [
+                                ExercisePrescription(name: "Easy jog", sets: 1, reps: "20 min")])]))
+        let data = try JSONEncoder().encode(specifics)
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("\"kind\":\"fitness\""))
+        XCTAssertEqual(try JSONDecoder().decode(GoalSpecifics.self, from: data), specifics)
+        XCTAssertEqual(specifics.displayName, "Couch to 5K")
+        XCTAssertEqual(specifics.routines.count, 1)
+        XCTAssertEqual(specifics.unitNoun, "workout")
+    }
+
+    func testLegacyGoalDecodesWithoutHorizonOrParent() throws {
+        // A goal written before horizon/parent existed must still decode, defaulting
+        // to long-term (effectiveHorizon).
+        let goal = Goal(title: "Run a 10k", type: .outcome)
+        let data = try JSONEncoder().encode(goal)
+        let json = String(decoding: data, as: UTF8.self)
+        XCTAssertFalse(json.contains("horizon"))
+        XCTAssertFalse(json.contains("parentGoalID"))
+        let decoded = try JSONDecoder().decode(Goal.self, from: data)
+        XCTAssertNil(decoded.horizon)
+        XCTAssertEqual(decoded.effectiveHorizon, .longTerm)
+    }
+
+    func testSequencerRotatesThroughRoutines() {
+        let a = Routine(name: "Workout A", exercises: [ExercisePrescription(name: "Squat", sets: 5, reps: "5")])
+        let b = Routine(name: "Workout B", exercises: [ExercisePrescription(name: "Deadlift", sets: 1, reps: "5")])
+        let specifics = GoalSpecifics.fitness(FitnessSpecifics(programName: "5×5", routines: [a, b]))
+        let goal = Goal(title: "Strength", type: .outcome, specifics: specifics)
+        let template = TaskTemplate(goalID: goal.id, title: "Workout", effortMinutes: 45,
+                                    recurrence: .daily(),
+                                    detail: .rotating(routineIDs: [a.id, b.id]))
+        let plan = Plan(goal: goal, milestones: [], templates: [template])
+        let pending = (0..<4).map { i in
+            TaskOccurrence(templateID: template.id, goalID: goal.id, title: "Workout",
+                           effortMinutes: 45, day: Fixtures.day(i),
+                           window: MinuteWindow(startHour: 7, endHour: 8))
+        }
+        let result = Sequencer.assignSlices(pending: pending, specifics: specifics, templates: plan.templates)
+        XCTAssertEqual(result.map { $0.slice?.label }, ["Workout A", "Workout B", "Workout A", "Workout B"])
+        XCTAssertEqual(result.first?.slice?.detail, "Squat · 5×5")
+    }
+
     func testGenericSpecificsRoundTrips() throws {
         let specifics = GoalSpecifics.generic(
             GenericSpecifics(unitNoun: "lesson",

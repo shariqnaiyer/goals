@@ -146,6 +146,32 @@ final class OnboardingTests: XCTestCase {
         XCTAssertTrue(ConcretenessCheck.isConcrete(r.state.focusAspirations[0]))
     }
 
+    func testScriptedFitnessGoalProducesTypedRoutines() async throws {
+        var state = try await driveToSurfaced("I want to build strength")
+        state.focusAspirationIDs = [state.aspirations[0].id]
+        var r = try await mock.onboardingTurn(state: state, latestUserText: "")
+        var guardCount = 0
+        while r.stage == .concretizing && guardCount < 8 {
+            r = try await mock.onboardingTurn(state: r.state, latestUserText: "Build strength, 45 minutes, three days")
+            guardCount += 1
+        }
+        XCTAssertEqual(r.stage, .readyToFormalize)
+        let asp = r.state.focusAspirations[0]
+        guard case .fitness(let fitness)? = asp.specifics else {
+            return XCTFail("expected fitness specifics, got \(String(describing: asp.specifics))")
+        }
+        XCTAssertFalse(fitness.routines.isEmpty)
+        XCTAssertTrue(fitness.routines.allSatisfy { !$0.exercises.isEmpty })
+
+        // And it generates a rotating-routine plan.
+        let proposal = try await mock.generatePlan(spec: asp.toGoalSpec(), profile: .makeDefault())
+        if case .rotating(let ids)? = proposal.templates.first?.detail {
+            XCTAssertEqual(Set(ids), Set(fitness.routines.map(\.id)))
+        } else {
+            XCTFail("expected a rotating fitness template")
+        }
+    }
+
     func testScriptedMultiGoalConcretizesEachSelectedGoal() async throws {
         var state = try await driveToSurfaced("read more, get fit")
         XCTAssertGreaterThanOrEqual(state.aspirations.count, 2)

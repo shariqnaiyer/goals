@@ -55,6 +55,7 @@ public enum ConcretenessCheck {
     static func isSeriesBased(_ a: AspirationDraft) -> Bool {
         if case .reading = a.specifics { return true }
         if case .generic = a.specifics { return false }
+        if case .fitness = a.specifics { return false }  // passes with a named program
         let t = (a.rawWish + " " + a.title).lowercased()
         return t.contains("read") || t.contains("book") || t.contains("chapter")
             || t.contains("course") || t.contains("read through")

@@ -105,7 +105,8 @@ public extension PlanProposal {
                         status: .active,
                         createdAt: now,
                         weeklyBudgetMinutes: spec.weeklyBudgetMinutes,
-                        specifics: specifics)
+                        specifics: specifics,
+                        horizon: spec.horizon)
 
         var keyToID: [String: UUID] = [:]
         let milestones = milestones.sorted { $0.order < $1.order }.map { pm -> Milestone in

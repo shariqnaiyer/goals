@@ -27,31 +27,20 @@ public enum Sequencer {
                                     consumedUnitIDs: Set<UUID> = []) -> [TaskOccurrence] {
         guard let specifics else { return pending }
 
-        // Templates that walk the series in order.
-        let sequentialTemplateIDs = Set(templates.compactMap { t -> UUID? in
-            if case .sequential = t.detail { return t.id }
-            return nil
-        })
-        guard !sequentialTemplateIDs.isEmpty else { return pending }
-
-        // The units still to cover: not already complete, not already consumed,
-        // in series order. This is the cursor the sessions draw from.
-        var remaining = specifics.seriesUnits
-            .filter { !$0.isComplete && !consumedUnitIDs.contains($0.id) }
-            .sorted { $0.order < $1.order }
-        guard !remaining.isEmpty else { return pending }
-
-        // Walk the sequential occurrences in schedule order (day, then window) so
-        // the earliest session gets the earliest unit. Non-sequential occurrences
-        // and any sessions past the last unit are left untouched.
-        let order = sequentialOrder(pending, sequentialTemplateIDs: sequentialTemplateIDs)
         var sliceByOccurrenceID: [UUID: SessionSlice] = [:]
-        for occurrenceID in order {
-            guard !remaining.isEmpty else { break }
-            let unit = remaining.removeFirst()
-            sliceByOccurrenceID[occurrenceID] = SessionSlice(
-                unitID: unit.id, label: unit.title, detail: unit.detail)
+        for template in templates {
+            switch template.detail {
+            case .sequential:
+                assignSequential(template: template, pending: pending, specifics: specifics,
+                                 consumedUnitIDs: consumedUnitIDs, into: &sliceByOccurrenceID)
+            case .rotating(let routineIDs):
+                assignRotating(template: template, pending: pending, specifics: specifics,
+                               routineIDs: routineIDs, into: &sliceByOccurrenceID)
+            case .none:
+                continue
+            }
         }
+        guard !sliceByOccurrenceID.isEmpty else { return pending }
 
         return pending.map { occ in
             guard let slice = sliceByOccurrenceID[occ.id] else { return occ }
@@ -61,12 +50,46 @@ public enum Sequencer {
         }
     }
 
-    /// IDs of the occurrences belonging to a sequential template, in schedule
-    /// order (earliest day/window first).
-    private static func sequentialOrder(_ pending: [TaskOccurrence],
-                                        sequentialTemplateIDs: Set<UUID>) -> [UUID] {
+    /// Walk the series units in order, earliest session → earliest unread unit.
+    private static func assignSequential(template: TaskTemplate,
+                                         pending: [TaskOccurrence],
+                                         specifics: GoalSpecifics,
+                                         consumedUnitIDs: Set<UUID>,
+                                         into slices: inout [UUID: SessionSlice]) {
+        var remaining = specifics.seriesUnits
+            .filter { !$0.isComplete && !consumedUnitIDs.contains($0.id) }
+            .sorted { $0.order < $1.order }
+        guard !remaining.isEmpty else { return }
+        for id in occurrenceOrder(pending, templateID: template.id) {
+            guard !remaining.isEmpty else { break }
+            let unit = remaining.removeFirst()
+            slices[id] = SessionSlice(unitID: unit.id, label: unit.title, detail: unit.detail)
+        }
+    }
+
+    /// Cycle through the routines in order, one per successive session.
+    private static func assignRotating(template: TaskTemplate,
+                                       pending: [TaskOccurrence],
+                                       specifics: GoalSpecifics,
+                                       routineIDs: [UUID],
+                                       into slices: inout [UUID: SessionSlice]) {
+        let byID = Dictionary(uniqueKeysWithValues: specifics.routines.map { ($0.id, $0) })
+        // Honour the template's stated order; fall back to the specifics' order.
+        let cycle = (routineIDs.isEmpty ? specifics.routines.map(\.id) : routineIDs)
+            .compactMap { byID[$0] }
+        guard !cycle.isEmpty else { return }
+        for (i, id) in occurrenceOrder(pending, templateID: template.id).enumerated() {
+            let routine = cycle[i % cycle.count]
+            let detail = routine.exercises.map(\.displayLine).joined(separator: " · ")
+            slices[id] = SessionSlice(unitID: routine.id, label: routine.name,
+                                      detail: detail.isEmpty ? nil : detail)
+        }
+    }
+
+    /// IDs of a template's occurrences in schedule order (earliest day/window first).
+    private static func occurrenceOrder(_ pending: [TaskOccurrence], templateID: UUID) -> [UUID] {
         pending
-            .filter { $0.templateID.map(sequentialTemplateIDs.contains) ?? false }
+            .filter { $0.templateID == templateID }
             .sorted { a, b in
                 if a.day != b.day { return a.day < b.day }
                 return (a.window?.start ?? Int.max) < (b.window?.start ?? Int.max)

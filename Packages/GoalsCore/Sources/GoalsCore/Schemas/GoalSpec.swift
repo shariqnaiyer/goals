@@ -22,6 +22,8 @@ public struct GoalSpec: Codable, Sendable, Hashable {
     /// The concrete object this goal is about (the specific book + chapters),
     /// carried from onboarding into plan generation. Optional so old specs decode.
     public var specifics: GoalSpecifics?
+    /// Long- vs short-term, carried from the aspiration into the created goal.
+    public var horizon: GoalHorizon?
 
     public init(title: String,
                 motivationStatement: String,
@@ -32,7 +34,8 @@ public struct GoalSpec: Codable, Sendable, Hashable {
                 weeklyBudgetMinutes: Int,
                 isComplete: Bool,
                 nextQuestion: String?,
-                specifics: GoalSpecifics? = nil) {
+                specifics: GoalSpecifics? = nil,
+                horizon: GoalHorizon? = nil) {
         self.title = title
         self.motivationStatement = motivationStatement
         self.type = type
@@ -43,6 +46,7 @@ public struct GoalSpec: Codable, Sendable, Hashable {
         self.isComplete = isComplete
         self.nextQuestion = nextQuestion
         self.specifics = specifics
+        self.horizon = horizon
     }
 
     public func targetCalendarDay(calendar: Calendar) -> CalendarDay? {

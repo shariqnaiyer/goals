@@ -42,7 +42,7 @@ struct MainTabView: View {
             NavigationStack { CoachView(goalID: nil) }
                 .tabItem { Label("Coach", systemImage: "bubble.left.and.bubble.right") }
             SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tabItem { Label("You", systemImage: "person.crop.circle") }
         }
         .task {
             // Auto-present the weekly review only when it's due and has content.

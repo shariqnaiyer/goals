@@ -57,6 +57,61 @@ public struct ReadingSpecifics: Codable, Sendable, Hashable {
     }
 }
 
+// MARK: Fitness
+
+/// One prescribed exercise within a routine. `reps` is a string so it can carry
+/// "5", "5×5", "30s", or "to failure" without a numeric straitjacket.
+public struct ExercisePrescription: Identifiable, Codable, Sendable, Hashable {
+    public let id: UUID
+    public var name: String
+    public var sets: Int
+    public var reps: String
+    public var note: String?
+
+    public init(id: UUID = UUID(), name: String, sets: Int, reps: String, note: String? = nil) {
+        self.id = id
+        self.name = name
+        self.sets = sets
+        self.reps = reps
+        self.note = note
+    }
+
+    /// "Squat · 5×5" style one-liner.
+    public var displayLine: String {
+        "\(name) · \(sets)×\(reps)"
+    }
+}
+
+/// A named workout the user rotates through ("Workout A").
+public struct Routine: Identifiable, Codable, Sendable, Hashable {
+    public let id: UUID
+    public var name: String
+    public var exercises: [ExercisePrescription]
+
+    public init(id: UUID = UUID(), name: String, exercises: [ExercisePrescription] = []) {
+        self.id = id
+        self.name = name
+        self.exercises = exercises
+    }
+}
+
+/// A fitness goal — where the user is now, where they're going, and the actual
+/// routines they cycle through (the substrate for a future workout-aware overseer).
+public struct FitnessSpecifics: Codable, Sendable, Hashable {
+    public var baseline: String
+    public var target: String
+    public var programName: String?
+    public var routines: [Routine]
+
+    public init(baseline: String = "", target: String = "",
+                programName: String? = nil, routines: [Routine] = []) {
+        self.baseline = baseline
+        self.target = target
+        self.programName = programName
+        self.routines = routines
+    }
+}
+
 /// A fallback for concrete goals that are an ordered list of units but not a
 /// purpose-built kind (a backlog of lessons, a list of recipes to cook).
 public struct GenericSpecifics: Codable, Sendable, Hashable {
@@ -82,31 +137,42 @@ public struct GenericSpecifics: Codable, Sendable, Hashable {
 /// added and matches the proxy JSON schema.
 public enum GoalSpecifics: Sendable, Hashable {
     case reading(ReadingSpecifics)
+    case fitness(FitnessSpecifics)
     case generic(GenericSpecifics)
 }
 
 public extension GoalSpecifics {
     /// The ordered units, uniformly, so callers (the `Sequencer`, detail views)
-    /// never switch on the kind.
+    /// never switch on the kind. Fitness is rotation-based, not a linear series,
+    /// so it has no series units (see `routines`).
     var seriesUnits: [SeriesUnit] {
         switch self {
         case .reading(let r): return r.chapters
         case .generic(let g): return g.units
+        case .fitness: return []
         }
     }
 
-    /// Singular noun for one unit ("chapter", "lesson").
+    /// The routines a `.rotating` template cycles through (empty unless fitness).
+    var routines: [Routine] {
+        if case .fitness(let f) = self { return f.routines }
+        return []
+    }
+
+    /// Singular noun for one unit ("chapter", "lesson", "workout").
     var unitNoun: String {
         switch self {
         case .reading: return "chapter"
         case .generic(let g): return g.unitNoun
+        case .fitness: return "workout"
         }
     }
 
-    /// A human display name for the concrete object ("Atomic Habits"), if any.
+    /// A human display name for the concrete object ("Atomic Habits", "Couch to 5K").
     var displayName: String? {
         switch self {
         case .reading(let r): return r.bookTitle
+        case .fitness(let f): return f.programName
         case .generic: return nil
         }
     }
@@ -117,13 +183,14 @@ public extension GoalSpecifics {
 }
 
 extension GoalSpecifics: Codable {
-    private enum Kind: String, Codable { case reading, generic }
-    private enum CodingKeys: String, CodingKey { case kind, reading, generic }
+    private enum Kind: String, Codable { case reading, fitness, generic }
+    private enum CodingKeys: String, CodingKey { case kind, reading, fitness, generic }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(Kind.self, forKey: .kind) {
         case .reading: self = .reading(try c.decode(ReadingSpecifics.self, forKey: .reading))
+        case .fitness: self = .fitness(try c.decode(FitnessSpecifics.self, forKey: .fitness))
         case .generic: self = .generic(try c.decode(GenericSpecifics.self, forKey: .generic))
         }
     }
@@ -134,6 +201,9 @@ extension GoalSpecifics: Codable {
         case .reading(let r):
             try c.encode(Kind.reading, forKey: .kind)
             try c.encode(r, forKey: .reading)
+        case .fitness(let f):
+            try c.encode(Kind.fitness, forKey: .kind)
+            try c.encode(f, forKey: .fitness)
         case .generic(let g):
             try c.encode(Kind.generic, forKey: .kind)
             try c.encode(g, forKey: .generic)

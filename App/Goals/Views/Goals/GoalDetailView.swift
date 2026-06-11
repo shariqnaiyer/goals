@@ -58,6 +58,13 @@ struct GoalDetailView: View {
             }
             .padding(.horizontal, Metric.s5).padding(.top, Metric.s2)
 
+            // Where you are — the concrete object (the book + chapters, the routines)
+            if let specifics = plan.goal.specifics {
+                SectionLabel("Where you are")
+                GoalSpecificsCard(specifics: specifics)
+                    .padding(.horizontal, Metric.s5)
+            }
+
             // Milestones
             SectionLabel("Milestones")
             MilestoneTimeline(milestones: plan.sortedMilestones)
@@ -270,5 +277,84 @@ struct GoalAdaptationView: View {
                 await m.proposeRevision(trigger: trigger)
             }
         }
+    }
+}
+
+// MARK: - Where you are (concrete object read-out)
+
+/// Renders a goal's `GoalSpecifics` as position, not pressure: the book's
+/// chapters with what's done, or the workout routines with their sets×reps.
+private struct GoalSpecificsCard: View {
+    let specifics: GoalSpecifics
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metric.s3) {
+            switch specifics {
+            case .reading(let reading): reading_(reading)
+            case .fitness(let fitness): fitness_(fitness)
+            case .generic(let generic): series(title: nil, units: generic.units, noun: generic.unitNoun)
+            }
+        }
+        .padding(Metric.s4)
+        .card()
+    }
+
+    @ViewBuilder
+    private func reading_(_ r: ReadingSpecifics) -> some View {
+        let done = r.chapters.filter(\.isComplete).count
+        Text(r.bookTitle).font(AppFont.headline).foregroundStyle(Palette.textPrimary)
+        if r.chapters.count > 0 {
+            GProgressBar(value: Double(done) / Double(r.chapters.count), tone: .success)
+            Text("\(done) of \(r.chapters.count) chapters")
+                .font(AppFont.footnote.monospacedDigit()).foregroundStyle(Palette.textTertiary)
+        }
+        unitList(r.chapters)
+    }
+
+    @ViewBuilder
+    private func fitness_(_ f: FitnessSpecifics) -> some View {
+        if let name = f.programName {
+            Text(name).font(AppFont.headline).foregroundStyle(Palette.textPrimary)
+        }
+        if !f.baseline.isEmpty || !f.target.isEmpty {
+            Text("\(f.baseline) → \(f.target)")
+                .font(AppFont.subhead).foregroundStyle(Palette.textSecondary)
+        }
+        ForEach(f.routines) { routine in
+            VStack(alignment: .leading, spacing: 3) {
+                Text(routine.name).font(AppFont.callout.weight(.medium)).foregroundStyle(Palette.textPrimary)
+                ForEach(routine.exercises) { ex in
+                    Text("· \(ex.displayLine)").font(AppFont.footnote).foregroundStyle(Palette.textSecondary)
+                }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func series(title: String?, units: [SeriesUnit], noun: String) -> some View {
+        if let title { Text(title).font(AppFont.headline) }
+        unitList(units)
+    }
+
+    @ViewBuilder
+    private func unitList(_ units: [SeriesUnit]) -> some View {
+        // Show the next handful around the current position to keep it scannable.
+        let sorted = units.sorted { $0.order < $1.order }
+        let firstPending = sorted.firstIndex(where: { !$0.isComplete }) ?? 0
+        let window = sorted[max(0, firstPending - 1)..<min(sorted.count, firstPending + 5)]
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(window)) { unit in
+                HStack(spacing: Metric.s2) {
+                    Image(systemName: unit.isComplete ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 14))
+                        .foregroundStyle(unit.isComplete ? Palette.positive : Palette.textTertiary)
+                    Text(unit.title)
+                        .font(AppFont.footnote)
+                        .foregroundStyle(unit.isComplete ? Palette.textTertiary : Palette.textPrimary)
+                }
+            }
+        }
+        .padding(.top, 2)
     }
 }

@@ -150,6 +150,23 @@ public struct MockLLMService: LLMService {
         // stamps "Chapter N" onto each session); other goals use the generic
         // two-template shape. Prefer the specifics onboarding already pinned down;
         // fall back to detecting one from the title.
+        // A fitness goal rotates through its routines (the Sequencer stamps
+        // "Workout A / B" with sets×reps onto each session).
+        if case .fitness(let fitness)? = spec.specifics {
+            let template = ProposedTemplate(
+                title: fitness.programName ?? "Workout", milestoneKey: "m1",
+                effortMinutes: min(50, max(20, sessionMinutes)), cadence: .timesPerWeek,
+                weekdays: [.monday, .wednesday, .friday], timesPerWeek: 3, intervalDays: 1,
+                preferredTimeOfDay: .earlyMorning, flexibility: .flexible,
+                minimumViableVariant: "10-minute version",
+                detail: .rotating(routineIDs: fitness.routines.map(\.id)))
+            return PlanProposal(goalTitle: spec.title,
+                                successCriteria: spec.successCriteria.isEmpty ? fitness.target : spec.successCriteria,
+                                milestones: milestones,
+                                templates: [template],
+                                specifics: .fitness(fitness))
+        }
+
         let providedReading: ReadingSpecifics? = {
             if case .reading(let r)? = spec.specifics { return r }
             return nil
@@ -451,6 +468,13 @@ public struct MockLLMService: LLMService {
                 if asp.suggestedTimesPerWeek == 0 { asp.suggestedTimesPerWeek = 5 }
                 if asp.weeklyBudgetMinutes == 0 { asp.weeklyBudgetMinutes = 105 }
                 resolve(&asp, .object, .startState, .targetState, .cadence, .capacity)
+            } else if isFitnessAspiration(asp) {
+                // Pin a concrete program + the routines the user will rotate through.
+                let fitness = Self.fitnessSpecifics(forChoice: text)
+                asp.specifics = .fitness(fitness)
+                asp.title = fitness.programName ?? "Get fit"
+                asp.type = .outcome
+                resolve(&asp, .object)
             } else {
                 if !text.isEmpty { asp.title = capitalizedFirst(text) }
                 if asp.title.caseInsensitiveCompare(asp.rawWish) == .orderedSame || asp.title.isEmpty {
@@ -497,6 +521,47 @@ public struct MockLLMService: LLMService {
         if case .reading = asp.specifics { return true }
         let t = (asp.rawWish + " " + asp.title).lowercased()
         return t.contains("read") || t.contains("book") || t.contains("chapter")
+    }
+
+    private func isFitnessAspiration(_ asp: AspirationDraft) -> Bool {
+        if case .fitness = asp.specifics { return true }
+        let t = (asp.rawWish + " " + asp.title).lowercased()
+        return t.contains("fit") || t.contains("run") || t.contains("strength")
+            || t.contains("gym") || t.contains("workout") || t.contains("exercise") || t.contains("move")
+    }
+
+    /// Build concrete fitness specifics (a named program + the routines to rotate)
+    /// from the user's object choice. Strength → A/B routines with sets×reps;
+    /// running → a Couch-to-5K-style rotation; otherwise a simple movement plan.
+    static func fitnessSpecifics(forChoice choice: String) -> FitnessSpecifics {
+        let c = choice.lowercased()
+        if c.contains("strength") || c.contains("strong") || c.contains("muscle") || c.contains("lift") {
+            let a = Routine(name: "Workout A", exercises: [
+                ExercisePrescription(name: "Squat", sets: 5, reps: "5"),
+                ExercisePrescription(name: "Bench press", sets: 5, reps: "5"),
+                ExercisePrescription(name: "Barbell row", sets: 5, reps: "5")])
+            let b = Routine(name: "Workout B", exercises: [
+                ExercisePrescription(name: "Squat", sets: 5, reps: "5"),
+                ExercisePrescription(name: "Overhead press", sets: 5, reps: "5"),
+                ExercisePrescription(name: "Deadlift", sets: 1, reps: "5")])
+            return FitnessSpecifics(baseline: "Starting out", target: "Stronger lifts, 3×/week",
+                                    programName: "Strength 5×5", routines: [a, b])
+        }
+        if c.contains("run") || c.contains("5k") || c.contains("jog") {
+            let runs = [
+                Routine(name: "Run A — intervals", exercises: [
+                    ExercisePrescription(name: "Walk/run intervals", sets: 1, reps: "20 min")]),
+                Routine(name: "Run B — steady", exercises: [
+                    ExercisePrescription(name: "Easy jog", sets: 1, reps: "25 min")]),
+                Routine(name: "Run C — long", exercises: [
+                    ExercisePrescription(name: "Long easy run", sets: 1, reps: "30 min")])]
+            return FitnessSpecifics(baseline: "Can't run 5 min nonstop yet", target: "Run 5K continuously",
+                                    programName: "Couch to 5K", routines: runs)
+        }
+        let move = Routine(name: "Daily movement", exercises: [
+            ExercisePrescription(name: "Brisk walk", sets: 1, reps: "20 min")])
+        return FitnessSpecifics(baseline: "Mostly sedentary", target: "Move every day",
+                                programName: "Daily movement", routines: [move])
     }
 
     private func themedObjectChoices(_ asp: AspirationDraft) -> [String] {
