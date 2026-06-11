@@ -98,6 +98,13 @@ public struct PlanMutator {
 
         case .shiftGoalTargetDate:
             plan.goal.targetDate = isoDay(op.newTargetDate, calendar: calendar)
+
+        case .markUnitComplete:
+            // Mark a concrete series unit (a chapter) done on the goal's specifics.
+            // This is intent (the goal), not occurrence history; the Sequencer
+            // re-sequences future sessions around it on the next reschedule.
+            guard let unitID = op.targetUnitID else { return }
+            plan.goal.specifics?.setUnit(unitID, complete: true)
         }
     }
 

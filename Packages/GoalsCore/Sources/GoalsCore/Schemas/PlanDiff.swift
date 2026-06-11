@@ -49,12 +49,17 @@ public struct PlanOperation: Codable, Sendable, Hashable, Identifiable {
         case shiftGoalTargetDate
         case shiftMilestoneTargetDate
         case completeMilestone
+        /// Mark a series unit (a book chapter, a module) done — advances the
+        /// goal's concrete progress; the Scheduler re-sequences around it.
+        case markUnitComplete
     }
 
     public var id: UUID
     public var kind: Kind
     public var targetTemplateID: UUID?
     public var targetMilestoneID: UUID?
+    /// The `SeriesUnit.id` for `markUnitComplete`.
+    public var targetUnitID: UUID?
     public var newTemplate: ProposedTemplate?
     public var newMilestone: ProposedMilestone?
     public var newEffortMinutes: Int?
@@ -71,6 +76,7 @@ public struct PlanOperation: Codable, Sendable, Hashable, Identifiable {
                 kind: Kind,
                 targetTemplateID: UUID? = nil,
                 targetMilestoneID: UUID? = nil,
+                targetUnitID: UUID? = nil,
                 newTemplate: ProposedTemplate? = nil,
                 newMilestone: ProposedMilestone? = nil,
                 newEffortMinutes: Int? = nil,
@@ -84,6 +90,7 @@ public struct PlanOperation: Codable, Sendable, Hashable, Identifiable {
         self.kind = kind
         self.targetTemplateID = targetTemplateID
         self.targetMilestoneID = targetMilestoneID
+        self.targetUnitID = targetUnitID
         self.newTemplate = newTemplate
         self.newMilestone = newMilestone
         self.newEffortMinutes = newEffortMinutes
@@ -96,7 +103,7 @@ public struct PlanOperation: Codable, Sendable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, kind, targetTemplateID, targetMilestoneID, newTemplate, newMilestone
+        case id, kind, targetTemplateID, targetMilestoneID, targetUnitID, newTemplate, newMilestone
         case newEffortMinutes, newTimesPerWeek, newWeekdays, newTitle, newTargetDate
         case orderedMilestoneIDs, note
     }
@@ -108,6 +115,7 @@ public struct PlanOperation: Codable, Sendable, Hashable, Identifiable {
         self.kind = try c.decode(Kind.self, forKey: .kind)
         self.targetTemplateID = try c.decodeIfPresent(UUID.self, forKey: .targetTemplateID)
         self.targetMilestoneID = try c.decodeIfPresent(UUID.self, forKey: .targetMilestoneID)
+        self.targetUnitID = try c.decodeIfPresent(UUID.self, forKey: .targetUnitID)
         self.newTemplate = try c.decodeIfPresent(ProposedTemplate.self, forKey: .newTemplate)
         self.newMilestone = try c.decodeIfPresent(ProposedMilestone.self, forKey: .newMilestone)
         self.newEffortMinutes = try c.decodeIfPresent(Int.self, forKey: .newEffortMinutes)
@@ -134,6 +142,7 @@ public struct PlanOperation: Codable, Sendable, Hashable, Identifiable {
         case .shiftGoalTargetDate: return "Move the goal date to \(newTargetDate ?? "")"
         case .shiftMilestoneTargetDate: return "Move a milestone date"
         case .completeMilestone: return "Mark a milestone complete"
+        case .markUnitComplete: return "Mark done"
         }
     }
 }

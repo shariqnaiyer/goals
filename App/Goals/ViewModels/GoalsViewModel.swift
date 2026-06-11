@@ -89,6 +89,17 @@ final class GoalDetailViewModel {
         load()
     }
 
+    /// Mark a concrete series unit (a chapter) done — routed through `PlanEngine`
+    /// like any plan change (validate → apply → record → reschedule).
+    func markUnitComplete(_ unitID: UUID) {
+        guard let title = plan?.goal.specifics?.seriesUnits.first(where: { $0.id == unitID })?.title else { return }
+        let diff = PlanDiff(summary: "Marked “\(title)” done",
+                            operations: [PlanOperation(kind: .markUnitComplete, targetUnitID: unitID,
+                                                       note: "Mark “\(title)” done")])
+        app.planEngine.apply(diff: diff, to: goalID, trigger: .userRequest)
+        load()
+    }
+
     func rejectProposal() {
         if let result = proposedResult {
             app.planEngine.recordRejected(diff: result.diff, goalID: goalID, trigger: result.trigger)

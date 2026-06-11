@@ -180,6 +180,24 @@ public extension GoalSpecifics {
     /// Units completed so far (by their `isComplete` flag).
     var completedUnitCount: Int { seriesUnits.filter(\.isComplete).count }
     var totalUnitCount: Int { seriesUnits.count }
+
+    /// Flip a series unit's completion (no-op for fitness, which has no series).
+    mutating func setUnit(_ id: UUID, complete: Bool) {
+        switch self {
+        case .reading(var r):
+            if let i = r.chapters.firstIndex(where: { $0.id == id }) {
+                r.chapters[i].isComplete = complete
+                self = .reading(r)
+            }
+        case .generic(var g):
+            if let i = g.units.firstIndex(where: { $0.id == id }) {
+                g.units[i].isComplete = complete
+                self = .generic(g)
+            }
+        case .fitness:
+            break
+        }
+    }
 }
 
 extension GoalSpecifics: Codable {

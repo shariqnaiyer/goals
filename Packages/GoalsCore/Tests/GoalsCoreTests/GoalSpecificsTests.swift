@@ -194,6 +194,30 @@ final class GoalSpecificsTests: XCTestCase {
                                              templates: [plainTemplate]).allSatisfy { $0.slice == nil })
     }
 
+    // MARK: markUnitComplete plan operation
+
+    func testMarkUnitCompleteFlipsUnitAndValidates() {
+        let book = ReadingSpecifics.numbered(bookTitle: "Atomic Habits", chapterCount: 3)
+        let unitID = book.chapters[1].id
+        let plan = Plan(goal: Goal(title: "Finish Atomic Habits", type: .outcome,
+                                   specifics: .reading(book)),
+                        milestones: [], templates: [])
+        let validator = PlanValidator(calendar: Fixtures.calendar)
+
+        let diff = PlanDiff(summary: "Read chapter 2",
+                            operations: [PlanOperation(kind: .markUnitComplete, targetUnitID: unitID)])
+        XCTAssertTrue(validator.validate(diff, against: plan, profile: .makeDefault()).isEmpty)
+
+        let applied = PlanMutator().apply(diff, to: plan, calendar: Fixtures.calendar)
+        XCTAssertEqual(applied.goal.specifics?.completedUnitCount, 1)
+        XCTAssertEqual(applied.goal.specifics?.seriesUnits.first { $0.id == unitID }?.isComplete, true)
+
+        // An unknown unit is rejected.
+        let bad = PlanDiff(summary: "bad",
+                           operations: [PlanOperation(kind: .markUnitComplete, targetUnitID: UUID())])
+        XCTAssertFalse(validator.validate(bad, against: plan, profile: .makeDefault()).isEmpty)
+    }
+
     // MARK: MockLLMService emits reading specifics end to end
 
     func testMockGeneratePlanEmitsReadingSpecificsForReadingGoal() async throws {

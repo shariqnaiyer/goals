@@ -8,7 +8,7 @@ public struct PlanValidator {
 
     public struct Violation: Sendable, Hashable, CustomStringConvertible {
         public enum Code: String, Sendable {
-            case unknownTemplate, unknownMilestone, badEffort, badFrequency
+            case unknownTemplate, unknownMilestone, unknownUnit, badEffort, badFrequency
             case badDate, reorderMismatch, overBudget, emptyDiff, missingPayload
         }
         public var code: Code
@@ -89,6 +89,16 @@ public struct PlanValidator {
                 if provided != milestoneIDs {
                     violations.append(.init(code: .reorderMismatch,
                                             detail: "reorder must list exactly the existing milestone IDs."))
+                }
+
+            case .markUnitComplete:
+                if let id = op.targetUnitID {
+                    let unitIDs = Set(plan.goal.specifics?.seriesUnits.map(\.id) ?? [])
+                    if !unitIDs.contains(id) {
+                        violations.append(.init(code: .unknownUnit, detail: "No series unit \(id)."))
+                    }
+                } else {
+                    violations.append(.init(code: .missingPayload, detail: "markUnitComplete needs targetUnitID."))
                 }
             }
         }

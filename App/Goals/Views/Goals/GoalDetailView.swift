@@ -61,7 +61,8 @@ struct GoalDetailView: View {
             // Where you are — the concrete object (the book + chapters, the routines)
             if let specifics = plan.goal.specifics {
                 SectionLabel("Where you are")
-                GoalSpecificsCard(specifics: specifics)
+                GoalSpecificsCard(specifics: specifics,
+                                  onToggleUnit: { model.markUnitComplete($0) })
                     .padding(.horizontal, Metric.s5)
             }
 
@@ -286,6 +287,7 @@ struct GoalAdaptationView: View {
 /// chapters with what's done, or the workout routines with their sets×reps.
 private struct GoalSpecificsCard: View {
     let specifics: GoalSpecifics
+    var onToggleUnit: (UUID) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metric.s3) {
@@ -345,14 +347,20 @@ private struct GoalSpecificsCard: View {
         let window = sorted[max(0, firstPending - 1)..<min(sorted.count, firstPending + 5)]
         VStack(alignment: .leading, spacing: 5) {
             ForEach(Array(window)) { unit in
-                HStack(spacing: Metric.s2) {
-                    Image(systemName: unit.isComplete ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(unit.isComplete ? Palette.positive : Palette.textTertiary)
-                    Text(unit.title)
-                        .font(AppFont.footnote)
-                        .foregroundStyle(unit.isComplete ? Palette.textTertiary : Palette.textPrimary)
+                Button { if !unit.isComplete { onToggleUnit(unit.id) } } label: {
+                    HStack(spacing: Metric.s2) {
+                        Image(systemName: unit.isComplete ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 14))
+                            .foregroundStyle(unit.isComplete ? Palette.positive : Palette.textTertiary)
+                        Text(unit.title)
+                            .font(AppFont.footnote)
+                            .foregroundStyle(unit.isComplete ? Palette.textTertiary : Palette.textPrimary)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .disabled(unit.isComplete)
             }
         }
         .padding(.top, 2)
