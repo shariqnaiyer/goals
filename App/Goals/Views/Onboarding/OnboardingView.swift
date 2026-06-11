@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @Environment(AppContainer.self) private var app
     @State private var model: OnboardingViewModel?
     @State private var input = ""
+    var isAddingGoal: Bool = false
     var onFinished: () -> Void
 
     var body: some View {
@@ -25,7 +26,7 @@ struct OnboardingView: View {
         .onAppear {
             if model == nil {
                 let m = OnboardingViewModel(app: app)
-                m.start()
+                m.start(addingGoal: isAddingGoal)
                 model = m
             }
         }

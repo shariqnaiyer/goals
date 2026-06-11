@@ -8,6 +8,7 @@ struct TodayView: View {
     @Environment(AppContainer.self) private var app
     @State private var model: TodayViewModel?
     @State private var skipTarget: TodayViewModel.Item?
+    @State private var detailItem: TodayViewModel.Item?
     @State private var reviewModel: WeeklyReviewViewModel?
 
     var body: some View {
@@ -60,7 +61,8 @@ struct TodayView: View {
                             TaskRow(item: item,
                                     onComplete: { withAnimation(.springy) { model.complete(item) } },
                                     onSnooze: { model.snooze(item, toTomorrow: false) },
-                                    onSkip: { skipTarget = item })
+                                    onSkip: { skipTarget = item },
+                                    onOpen: { detailItem = item })
                                 .listRowBackground(Palette.cardBackground)
                                 .listRowSeparatorTint(Palette.hairline)
                         }
@@ -100,6 +102,16 @@ struct TodayView: View {
             .sheet(item: adaptationBinding(model)) { prompt in
                 AdaptationPromptSheet(prompt: prompt)
             }
+            // Attached to a distinct (clear) view: two `.sheet` modifiers on the
+            // same view conflict, and only the first presents.
+            .background(
+                Color.clear.sheet(item: $detailItem) { item in
+                    TaskDetailSheet(
+                        item: item,
+                        onComplete: { withAnimation(.springy) { model.complete(item) }; detailItem = nil },
+                        onSkip: { reason in model.skip(item, reason: reason); detailItem = nil })
+                }
+            )
         }
     }
 
@@ -155,6 +167,7 @@ private struct TaskRow: View {
     var onComplete: () -> Void
     var onSnooze: () -> Void
     var onSkip: () -> Void
+    var onOpen: () -> Void = {}
 
     private var occ: TaskOccurrence { item.occurrence }
     private var isDone: Bool { occ.status == .done }
@@ -165,24 +178,32 @@ private struct TaskRow: View {
                 .disabled(dimmed)
                 .opacity(dimmed ? 0.5 : 1)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(occ.title)
-                    .font(AppFont.body)
-                    .strikethrough(isDone, color: Palette.textTertiary)
-                    .foregroundStyle(isDone ? Palette.textTertiary : Palette.textPrimary)
-                if let slice = occ.slice {
-                    // The concrete content of this session ("Chapter 4").
-                    Text(slice.label)
-                        .font(AppFont.subhead)
-                        .foregroundStyle(isDone ? Palette.textTertiary : Palette.accent)
+            Button(action: { if !dimmed { onOpen() } }) {
+                HStack(spacing: Metric.s3) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(occ.title)
+                            .font(AppFont.body)
+                            .strikethrough(isDone, color: Palette.textTertiary)
+                            .foregroundStyle(isDone ? Palette.textTertiary : Palette.textPrimary)
+                        if let slice = occ.slice {
+                            // The concrete content of this session ("Chapter 4").
+                            Text(slice.label)
+                                .font(AppFont.subhead)
+                                .foregroundStyle(isDone ? Palette.textTertiary : Palette.accent)
+                        }
+                        Text("\(item.goalTitle) · \(Format.window(occ.window)) · \(Format.duration(occ.effortMinutes))")
+                            .font(AppFont.footnote).foregroundStyle(Palette.textTertiary)
+                    }
+                    Spacer()
+                    if !isDone, !dimmed {
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Palette.textTertiary)
+                    }
                 }
-                Text("\(item.goalTitle) · \(Format.window(occ.window)) · \(Format.duration(occ.effortMinutes))")
-                    .font(AppFont.footnote).foregroundStyle(Palette.textTertiary)
+                .contentShape(Rectangle())
             }
-            Spacer()
-            if let mvv = minimumHint, !isDone, !dimmed {
-                Text("min: \(mvv)").font(AppFont.caption1).foregroundStyle(Palette.gentle)
-            }
+            .buttonStyle(.plain)
+            .disabled(dimmed)
         }
         .padding(.vertical, 4)
         .opacity(dimmed ? 0.6 : 1)
@@ -193,9 +214,76 @@ private struct TaskRow: View {
             }
         }
     }
+}
 
-    /// The template's minimum-viable variant, if any (kept lightweight here).
-    private var minimumHint: String? { nil }
+/// What exactly this session is — the concrete slice (chapter + detail, or
+/// routine + its exercises), with a one-tap "do the minimum" and skip-with-reason.
+/// Completing routes through the same `TaskActionService` as the row check.
+private struct TaskDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let item: TodayViewModel.Item
+    var onComplete: () -> Void
+    var onSkip: (String?) -> Void
+
+    private var occ: TaskOccurrence { item.occurrence }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Metric.s4) {
+                    VStack(alignment: .leading, spacing: Metric.s2) {
+                        Text(item.goalTitle.uppercased())
+                            .font(AppFont.caption1).tracking(0.4).foregroundStyle(Palette.textTertiary)
+                        Text(occ.slice?.label ?? occ.title)
+                            .font(AppFont.title3).foregroundStyle(Palette.textPrimary)
+                        if let detail = occ.slice?.detail, !detail.isEmpty {
+                            Text(detail).font(AppFont.callout).foregroundStyle(Palette.textSecondary)
+                        }
+                        Text("\(occ.title) · \(Format.window(occ.window)) · \(Format.duration(occ.effortMinutes))")
+                            .font(AppFont.footnote).foregroundStyle(Palette.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Metric.s4)
+                    .card()
+
+                    Button(action: onComplete) { Text("Mark done") }
+                        .buttonStyle(PrimaryButtonStyle())
+
+                    if let mvv = item.minimumViableVariant {
+                        Button(action: onComplete) {
+                            Text("Did the minimum — \(mvv)")
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
+                    }
+
+                    VStack(spacing: Metric.s2) {
+                        Text("Can't today? That's fine — I'll learn from it.")
+                            .font(AppFont.footnote).foregroundStyle(Palette.textTertiary)
+                        HStack(spacing: Metric.s2) {
+                            skipButton("No time", "no time")
+                            skipButton("Not feeling it", "not feeling it")
+                            skipButton("Did it elsewhere", "done elsewhere")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Metric.s2)
+                }
+                .padding(Metric.s4)
+            }
+            .background(Palette.bgApp.ignoresSafeArea())
+            .navigationTitle("This session")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } } }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func skipButton(_ label: String, _ reason: String) -> some View {
+        Button { onSkip(reason) } label: {
+            Text(label).font(AppFont.caption1)
+        }
+        .buttonStyle(PlainFillButtonStyle())
+    }
 }
 
 /// Offered after repeated misses: a one-tap path into a gentler plan. Framed as

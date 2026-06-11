@@ -44,8 +44,21 @@ final class OnboardingViewModel {
         self.constraintDraft = app.store.profile()
     }
 
-    func start() {
+    /// `addingGoal` enters mid-flow for an existing user: the person and the week
+    /// are already known, so it skips grounding and starts at surfacing.
+    func start(addingGoal: Bool = false) {
         guard messages.isEmpty else { return }
+        if addingGoal {
+            let existing = app.store.userProfile()
+            if existing.person.isGrounded {
+                state.person = existing.person
+                state.stage = .surfacing
+                phase = .surfacing
+                appendAssistant("Good to see you back. What do you want to take on next? "
+                    + "I'll keep what I already know about your week in mind.")
+                return
+            }
+        }
         phase = .grounding
         appendAssistant("Hey — I'm your coach, and I learn fast, so this won't take long. "
             + "Tell me a bit about your life right now and what you've been wanting to change — ramble if you want.")
@@ -168,10 +181,15 @@ final class OnboardingViewModel {
         guard !editablePlans.isEmpty else { return }
         phase = .creating
         app.store.save(constraintDraft)
-        // Persist the learned person + the goals we didn't start as backlog.
-        app.store.save(UserProfile(person: state.person,
-                                   backlog: state.backlogAspirations,
-                                   updatedAt: app.clock.now()))
+        // Persist the learned person + backlog, merging with any prior profile so
+        // adding a goal never wipes earlier context.
+        let existing = app.store.userProfile()
+        let person = state.person.isGrounded ? state.person : existing.person
+        var backlog = existing.backlog
+        for aspiration in state.backlogAspirations where !backlog.contains(where: { $0.id == aspiration.id }) {
+            backlog.append(aspiration)
+        }
+        app.store.save(UserProfile(person: person, backlog: backlog, updatedAt: app.clock.now()))
         for plan in editablePlans {
             app.planEngine.createGoal(fromEdited: plan)
         }

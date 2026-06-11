@@ -11,6 +11,8 @@ final class TodayViewModel {
     struct Item: Identifiable {
         let occurrence: TaskOccurrence
         let goalTitle: String
+        /// The template's lighter fallback ("Read 2 pages"), for the daily-minimum UI.
+        var minimumViableVariant: String?
         var id: UUID { occurrence.id }
     }
 
@@ -39,19 +41,32 @@ final class TodayViewModel {
     func load() {
         let tomorrow = app.clock.day(offset: 1)
         let titles = goalTitles()
-        todayItems = items(on: today, titles: titles)
-        tomorrowItems = items(on: tomorrow, titles: titles)
+        let minimums = templateMinimums()
+        todayItems = items(on: today, titles: titles, minimums: minimums)
+        tomorrowItems = items(on: tomorrow, titles: titles, minimums: minimums)
     }
 
-    private func items(on day: CalendarDay, titles: [UUID: String]) -> [Item] {
+    private func items(on day: CalendarDay, titles: [UUID: String], minimums: [UUID: String]) -> [Item] {
         app.store.occurrences(on: day)
             .filter { titles[$0.goalID] != nil }
             .sorted { ($0.window?.start ?? 0) < ($1.window?.start ?? 0) }
-            .map { Item(occurrence: $0, goalTitle: titles[$0.goalID] ?? "Goal") }
+            .map { Item(occurrence: $0, goalTitle: titles[$0.goalID] ?? "Goal",
+                        minimumViableVariant: $0.templateID.flatMap { minimums[$0] }) }
     }
 
     private func goalTitles() -> [UUID: String] {
         Dictionary(uniqueKeysWithValues: app.store.activeGoals().map { ($0.id, $0.title) })
+    }
+
+    private func templateMinimums() -> [UUID: String] {
+        var map: [UUID: String] = [:]
+        for goal in app.store.activeGoals() {
+            guard let plan = app.store.plan(for: goal.id) else { continue }
+            for template in plan.templates where template.minimumViableVariant != nil {
+                map[template.id] = template.minimumViableVariant
+            }
+        }
+        return map
     }
 
     // MARK: Actions
