@@ -3,17 +3,39 @@
 The honest state of the project and a prioritised backlog. **Start here to pick
 up work.** Maps to the phases in `PLAN.md` §8.
 
-Last updated: initial build (authored without a compiler — see the warning
-below). Keep this file current as you verify and extend.
+Last updated: first Mac build — **the project now compiles and runs**
+(Xcode 26.4 / Swift 6.3, iPhone 17 Pro simulator). Keep this file current as you
+verify and extend.
 
 ---
 
-## ⚠️ Reality check: nothing has been compiled
+## ✅ Reality check: it now compiles and runs
 
-This codebase was written in a Linux container with **no Swift toolchain and no
-Xcode**. It has never been compiled or run. The structure is complete and
-internally consistent, and the pure domain layer is written to be testable, but
-expect to fix compiler issues on the first Mac build.
+This codebase was originally written in a Linux container with no Swift toolchain
+and had never been compiled. As of the first Mac build it is green:
+
+- `cd Packages/GoalsCore && swift test` → **29 tests pass.**
+- `cd App && xcodegen generate && xcodebuild -scheme Goals -destination
+  'platform=iOS Simulator,name=iPhone 17 Pro' build` → **build succeeds**; the app
+  installs, launches, and runs onboarding on the offline `MockLLMService`.
+
+Five issues the compiler-less author couldn't catch were fixed to get here:
+1. `LLMClient.swift` — a generic `Wrapper<T>` was nested inside a generic function
+   (illegal); moved to file scope as `ResultWrapper`.
+2. `CoachView.swift` — an ambiguous `$0` trailing closure for `onChoose`; named the
+   parameter.
+3. `GoalDetailView.swift` — an `onChoose` closure returned a `Task` (type mismatch);
+   added an explicit `return`.
+4. `PlanCards.swift` — `ToolbarItemPlacement.cancelAction` → `.cancellationAction`.
+5. `Info.plist` — missing `CFBundleIdentifier`/`CFBundleExecutable`/`CFBundleName`/
+   `CFBundlePackageType` (install failed with "Missing bundle ID"); added the
+   standard `$(PRODUCT_*)` build-variable keys.
+
+Remaining strict-concurrency **warnings** (not errors) to clean up later:
+`UNUserNotificationCenter`/`UNNotification` non-Sendable in the notification
+delegate (`GoalsApp.swift`), `UIBarAppearance.configure()` off-MainActor in
+`RootView.swift:66`, and SwiftData `#Predicate` `KeyPath`-not-Sendable warnings in
+`Repositories.swift`.
 
 **First session on a Mac should:**
 1. `cd Packages/GoalsCore && swift test` — fix any failures here first; this
@@ -37,18 +59,18 @@ Most-likely problem spots (no compiler caught these):
 
 | Area | What exists | Verified? |
 |---|---|---|
-| Domain models | All value types, timezone-stable time model | ✋ tests written, not run |
-| Scheduler (Layer 1) | Availability + greedy placement + overcommit signal | ✋ tests written, not run |
-| Plan validation/mutation | `PlanValidator`, `PlanMutator` | ✋ tests written, not run |
-| Performance analysis | `PerformanceAnalyzer`, snapshots, miss streaks | ✋ tests written, not run |
+| Domain models | All value types, timezone-stable time model | ✅ 29 tests pass |
+| Scheduler (Layer 1) | Availability + greedy placement + overcommit signal | ✅ 29 tests pass |
+| Plan validation/mutation | `PlanValidator`, `PlanMutator` | ✅ 29 tests pass |
+| Performance analysis | `PerformanceAnalyzer`, snapshots, miss streaks | ✅ 29 tests pass |
 | Adaptation triggers | `AdaptationPolicy` (deterministic gating) | ✋ |
 | LLM contracts | `GoalSpec` / `PlanProposal` / `PlanDiff` schemas | ✋ |
-| Replan loop | `ReplanService` validate-and-retry | ✋ tests written, not run |
+| Replan loop | `ReplanService` validate-and-retry | ✅ 29 tests pass |
 | Offline LLM | `MockLLMService` (deterministic) | ✋ |
 | Persistence | SwiftData models + repository seam | ✋ |
 | Services | PlanEngine, SchedulingCoordinator, Task/Coach/Perf/Notification | ✋ |
 | LLM networking | `LLMClient` + decode-repair round-trip | ✋ |
-| Onboarding UI | Interview chat + editable proposal card | ✋ |
+| Onboarding UI | Interview chat + editable proposal card | ✅ builds + runs |
 | Today UI | List, complete/skip/snooze, forgiving progress, adaptation prompt | ✋ |
 | Goals UI | List, detail, milestones, plan history, lifecycle, adaptation | ✋ |
 | Coach UI | Chat with inline diff cards | ✋ |

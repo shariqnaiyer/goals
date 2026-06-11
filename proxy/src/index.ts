@@ -95,8 +95,8 @@ async function callClaude(env: Env, body: RequestBody, spec: typeof SPECS[Task])
 // Map each task's tool input to the { result } shape the Swift client decodes.
 function shapeResult(task: Task, input: any): unknown {
   switch (task) {
-    case "interview":
-      return { spec: input.spec, assistantMessage: input.assistantMessage };
+    case "onboardingTurn":
+      return input; // OnboardingTurnResult shape: { state, assistantMessage, choices, stage }
     case "generatePlan":
       return input; // PlanProposal shape
     case "replan":
