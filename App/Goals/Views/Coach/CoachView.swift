@@ -3,7 +3,7 @@ import GoalsCore
 
 /// The Coach chat (docs/PLAN.md §2.2 tab 3). Works as the general thread (tab)
 /// or scoped to a goal (pushed from goal detail). Coach-proposed diffs render as
-/// interactive cards inline.
+/// interactive cards inline — the hybrid-chat loop.
 struct CoachView: View {
     @Environment(AppContainer.self) private var app
     let goalID: UUID?
@@ -12,23 +12,28 @@ struct CoachView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if goalID == nil {
+                CoachHeader(title: "Coach", subtitle: "", online: true)
+                Divider().overlay(Palette.hairline)
+            }
             if let model {
                 ChatScrollView(messageCount: model.messages.count, isTyping: model.isAssistantTyping) {
                     ForEach(model.messages) { message in
-                        messageView(model, message: message)
+                        messageView(model, message: message).transition(.fadeUp)
                     }
                     if model.isAssistantTyping { TypingIndicator() }
                 }
+                .animation(.gentle, value: model.messages.count)
                 MessageComposer(text: $input, isSending: model.isAssistantTyping,
                                 placeholder: "Tell the coach anything…") {
                     let text = input; input = ""
                     Task { await model.send(text) }
                 }
-            } else { ProgressView() }
+            } else { ProgressView().frame(maxHeight: .infinity) }
         }
-        .navigationTitle(goalID == nil ? "Coach" : "Coach")
+        .navigationTitle(goalID == nil ? "" : "Coach")
         .navigationBarTitleDisplayMode(.inline)
-        .background(Palette.screenBackground)
+        .background(Palette.bgApp.ignoresSafeArea())
         .onAppear {
             if model == nil { model = CoachViewModel(app: app, goalID: goalID) }
             model?.load()

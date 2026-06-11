@@ -28,6 +28,40 @@ from a git-ignored `Secrets.xcconfig`.
 - `Views/` — SwiftUI screens + `Views/Shared/` reusable chat/card components.
 - `Resources/` — Info.plist, asset catalog, `Secrets.example.xcconfig`.
 
+## Design system (warm paper + pine teal)
+
+The visual language lives in `Views/Shared/DesignSystem.swift` (tokens) and
+`Views/Shared/Components.swift` (controls). It is the source of truth — don't
+hardcode colours, sizes, or fonts in screens.
+
+- **Colour:** reference `Palette.*` semantic roles only (never raw hex). Warm
+  cream page (`Palette.bgApp`), warm-white cards (`Palette.cardBackground`), ink
+  text (`Palette.textPrimary`, never black), one pine-teal accent
+  (`Palette.accent`). Status is calm: `Palette.positive` (sage) for done,
+  `Palette.gentle` (amber) for missed/snoozed — **never red** — and
+  `Palette.danger` (terracotta) for erase only. Light + dark are both defined via
+  `Color(light:dark:)`. The asset-catalog `AccentColor` is pine teal.
+- **Type:** `AppFont.*` is the iOS HIG ramp (largeTitle → caption). Add tracking
+  on big display titles with `.tracking(...)`. Tabular numerals (`.monospacedDigit()`)
+  for counts/durations.
+- **Spacing & radii:** `Metric.s1…s8` (8pt rhythm) and `Radius.sm/md/lg/xl/xxl`.
+- **Surfaces:** `.card()` is the signature warm-white card (18px radius, hairline,
+  whisper shadow). `CardGroup` is the inset list-style container. `SectionLabel`
+  is the one uppercase, tracked overline.
+- **Controls:** `PrimaryButtonStyle` (the single teal CTA per screen, soft glow),
+  `SecondaryButtonStyle`, `PlainFillButtonStyle`, `PressableStyle` (cards/rows),
+  `TaskCheck` (spring completion), `GProgressBar`, `StatusBadge`, `BrandMark` /
+  `CoachAvatar`, `TypingIndicator`.
+- **Motion:** `.gentle` (iOS decelerate) for most transitions; `.springy` only
+  for cards and the completion check. `AnyTransition.fadeUp` is the chat-message
+  entrance. Restrained — the only persistent animation is the typing dots.
+- **Voice:** sentence case everywhere except section overlines; warm,
+  second-person, forgiving copy ("Skipping is fine — I'll learn from it"); a
+  single emoji only at emotional beats. One clear action per screen.
+
+When adding UI, compose from these primitives. SF Symbols for iconography (the
+brand kit's Phosphor names map back to SF Symbols).
+
 ## Conventions
 
 - **MVVM-lite.** View models are thin glue; real logic is in `GoalsCore`. No TCA.

@@ -2,8 +2,8 @@ import SwiftUI
 import GoalsCore
 import UniformTypeIdentifiers
 
-/// Settings (docs/PLAN.md §2.2 #5, §7): editable constraints, notification
-/// control, the privacy disclosure, and data export / erase.
+/// Settings (docs/PLAN.md §2.2 #5, §7): editable constraints, the coaching mode,
+/// and the privacy controls (export / erase) with a plain-spoken disclosure.
 struct SettingsView: View {
     @Environment(AppContainer.self) private var app
     @State private var model: SettingsViewModel?
@@ -17,7 +17,7 @@ struct SettingsView: View {
                 if let model { form(model) } else { ProgressView() }
             }
             .navigationTitle("Settings")
-            .background(Palette.screenBackground)
+            .background(Palette.bgGrouped.ignoresSafeArea())
         }
         .onAppear { if model == nil { model = SettingsViewModel(app: app) } }
     }
@@ -30,11 +30,21 @@ struct SettingsView: View {
                 NavigationLink {
                     ConstraintEditorView(model: model)
                 } label: {
-                    Label("Work & sleep hours", systemImage: "clock")
+                    Label {
+                        Text("Work & sleep hours")
+                    } icon: {
+                        Image(systemName: "clock").foregroundStyle(Palette.textSecondary)
+                    }
                 }
-                Stepper("Max \(Format.duration(model.profile.maxDailyTaskMinutes)) of tasks per day",
-                        value: $model.profile.maxDailyTaskMinutes, in: 30...360, step: 15)
-                    .onChange(of: model.profile.maxDailyTaskMinutes) { _, _ in model.save() }
+                Stepper(value: $model.profile.maxDailyTaskMinutes, in: 30...360, step: 15) {
+                    HStack {
+                        Text("Max tasks per day")
+                        Spacer()
+                        Text(Format.duration(model.profile.maxDailyTaskMinutes))
+                            .foregroundStyle(Palette.textSecondary).monospacedDigit()
+                    }
+                }
+                .onChange(of: model.profile.maxDailyTaskMinutes) { _, _ in model.save() }
             }
 
             Section("Coaching") {
@@ -44,13 +54,17 @@ struct SettingsView: View {
             Section {
                 Button {
                     if let data = model.exportJSON() {
-                        exportDocument = JSONDocument(data: data)
-                        showExporter = true
+                        exportDocument = JSONDocument(data: data); showExporter = true
                     }
-                } label: { Label("Export my data", systemImage: "square.and.arrow.up") }
-
+                } label: {
+                    Label { Text("Export my data") } icon: {
+                        Image(systemName: "square.and.arrow.up").foregroundStyle(Palette.accent)
+                    }
+                }
                 Button(role: .destructive) { showEraseConfirm = true } label: {
-                    Label("Erase everything", systemImage: "trash")
+                    Label { Text("Erase everything").foregroundStyle(Palette.danger) } icon: {
+                        Image(systemName: "trash").foregroundStyle(Palette.danger)
+                    }
                 }
             } header: {
                 Text("Your data")
@@ -58,20 +72,21 @@ struct SettingsView: View {
                 Text("Everything lives on this device. Coaching sends only the relevant goal's summary and your progress — never your whole history, and nothing is stored on our servers.")
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Palette.bgGrouped.ignoresSafeArea())
+        .tint(Palette.accent)
         .confirmationDialog("Erase all goals and data?", isPresented: $showEraseConfirm) {
             Button("Erase everything", role: .destructive) { model.eraseAll() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently deletes all goals, tasks and history on this device.")
         }
-        .fileExporter(isPresented: $showExporter,
-                      document: exportDocument,
-                      contentType: .json,
-                      defaultFilename: "goals-export") { _ in }
+        .fileExporter(isPresented: $showExporter, document: exportDocument,
+                      contentType: .json, defaultFilename: "goals-export") { _ in }
     }
 }
 
-/// Per-weekday wake/bedtime + work-hours editor.
+/// Per-weekday wake / sleep editor (work hours are a single weekday block in v1).
 struct ConstraintEditorView: View {
     @Bindable var model: SettingsViewModel
 
@@ -88,6 +103,8 @@ struct ConstraintEditorView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Palette.bgGrouped.ignoresSafeArea())
         .navigationTitle("Work & sleep")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { model.save() }
@@ -100,7 +117,6 @@ struct ConstraintEditorView: View {
                     set: { minute.wrappedValue = minuteOf($0) }),
                    displayedComponents: .hourAndMinute)
     }
-
     private func dateFrom(minute: Int) -> Date {
         var c = DateComponents(); c.hour = minute / 60; c.minute = minute % 60
         return Calendar.current.date(from: c) ?? Date()
@@ -116,9 +132,7 @@ struct JSONDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
     var data: Data
     init(data: Data) { self.data = data }
-    init(configuration: ReadConfiguration) throws {
-        data = configuration.file.regularFileContents ?? Data()
-    }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: data)
     }

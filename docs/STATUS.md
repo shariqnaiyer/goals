@@ -56,6 +56,7 @@ Most-likely problem spots (no compiler caught these):
 | Settings UI | Constraints editor, privacy, export, erase | ✋ |
 | Notifications | Local digest + per-task reminders + Done/Snooze | ✋ |
 | Proxy | Cloudflare Worker, versioned prompts, structured output | ✋ typecheck not run |
+| Design system | Warm-paper + pine-teal tokens, components, all screens restyled, Welcome flow | ✋ |
 
 Legend: ✅ verified · ✋ written but unverified · ⛔ broken/known-bad.
 
@@ -68,7 +69,10 @@ Legend: ✅ verified · ✋ written but unverified · ⛔ broken/known-bad.
   attestation is a production TODO.
 - **Proxy auth / rate limiting / subscription metering** — commented TODOs in
   `proxy/src/index.ts`. No StoreKit yet.
-- **App icon** — `AppIcon.appiconset` has the metadata slot but no image asset.
+- **App icon** — `AppIcon.appiconset` has the metadata slot but no rasterised
+  image yet. The brand mark is drawn in-app (`BrandMark`) and the icon artwork is
+  specified in the design system (warm-paper square + pine-teal concentric rings,
+  `#3B7A6B`); export a 1024² PNG from that and drop it in.
 - **Eval suite** — the plan calls for a recorded-scenario regression suite for
   prompts/diffs (Phase 0). The `GoalsCoreTests` cover the deterministic engine;
   the prompt-quality eval harness is not built.
