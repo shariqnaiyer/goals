@@ -27,6 +27,10 @@ public struct Goal: Identifiable, Codable, Sendable, Hashable {
     public var archivedReason: String?
     /// Honest weekly time budget in minutes, captured at onboarding.
     public var weeklyBudgetMinutes: Int
+    /// The concrete object this goal is about (the specific book + chapters, the
+    /// named program + routines). Opaque to the Scheduler. Optional so legacy
+    /// goals decode unchanged (docs/PLAN.md — concreteness).
+    public var specifics: GoalSpecifics?
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -37,7 +41,8 @@ public struct Goal: Identifiable, Codable, Sendable, Hashable {
                 status: GoalStatus = .active,
                 createdAt: Date = Date(),
                 archivedReason: String? = nil,
-                weeklyBudgetMinutes: Int = 0) {
+                weeklyBudgetMinutes: Int = 0,
+                specifics: GoalSpecifics? = nil) {
         self.id = id
         self.title = title
         self.motivationStatement = motivationStatement
@@ -48,6 +53,7 @@ public struct Goal: Identifiable, Codable, Sendable, Hashable {
         self.createdAt = createdAt
         self.archivedReason = archivedReason
         self.weeklyBudgetMinutes = weeklyBudgetMinutes
+        self.specifics = specifics
     }
 }
 
@@ -112,6 +118,10 @@ public struct TaskTemplate: Identifiable, Codable, Sendable, Hashable {
     public var minimumViableVariant: String?
     /// `false` once adaptation or the user pauses just this template.
     public var isActive: Bool
+    /// How this template draws sessions from the goal's `GoalSpecifics` (walk a
+    /// chapter list, rotate routines). *Intent* — adaptation may rewrite it.
+    /// `nil` means an ordinary task with no concrete sub-structure.
+    public var detail: TemplateDetail?
 
     public init(id: UUID = UUID(),
                 goalID: UUID,
@@ -122,7 +132,8 @@ public struct TaskTemplate: Identifiable, Codable, Sendable, Hashable {
                 preferredWindows: [Weekday: MinuteWindow] = [:],
                 flexibility: Flexibility = .flexible,
                 minimumViableVariant: String? = nil,
-                isActive: Bool = true) {
+                isActive: Bool = true,
+                detail: TemplateDetail? = nil) {
         self.id = id
         self.goalID = goalID
         self.milestoneID = milestoneID
@@ -133,6 +144,7 @@ public struct TaskTemplate: Identifiable, Codable, Sendable, Hashable {
         self.flexibility = flexibility
         self.minimumViableVariant = minimumViableVariant
         self.isActive = isActive
+        self.detail = detail
     }
 
     /// Estimated weekly load in minutes — input to the budget validator.
@@ -163,6 +175,10 @@ public struct TaskOccurrence: Identifiable, Codable, Sendable, Hashable {
     public var skipReason: String?
     /// 1...5 self-rated difficulty, optional, feeds adaptation.
     public var difficultyRating: Int?
+    /// The concrete content of this session ("Chapter 4"), assigned by the
+    /// `Sequencer` from the goal's `GoalSpecifics`. Immutable history once the
+    /// occurrence is done/skipped; `nil` for ordinary tasks.
+    public var slice: SessionSlice?
 
     public init(id: UUID = UUID(),
                 templateID: UUID?,
@@ -174,7 +190,8 @@ public struct TaskOccurrence: Identifiable, Codable, Sendable, Hashable {
                 status: OccurrenceStatus = .pending,
                 completedAt: Date? = nil,
                 skipReason: String? = nil,
-                difficultyRating: Int? = nil) {
+                difficultyRating: Int? = nil,
+                slice: SessionSlice? = nil) {
         self.id = id
         self.templateID = templateID
         self.goalID = goalID
@@ -186,6 +203,7 @@ public struct TaskOccurrence: Identifiable, Codable, Sendable, Hashable {
         self.completedAt = completedAt
         self.skipReason = skipReason
         self.difficultyRating = difficultyRating
+        self.slice = slice
     }
 }
 
@@ -230,6 +248,11 @@ public struct ConstraintProfile: Codable, Sendable, Hashable {
         let bed = bedtimeMinute[day] ?? Self.defaultBedtime
         return MinuteWindow(start: wake, end: max(bed, wake))
     }
+
+    /// A conservative ceiling on schedulable task minutes per week — the daily
+    /// cap across 7 days. Used by `ConcretenessCheck` to keep the combined load of
+    /// 1–3 onboarding goals realistic (docs/PLAN.md — capacity cap).
+    public var weeklyCapacityMinutes: Int { maxDailyTaskMinutes * 7 }
 
     /// A reasonable default: 9–5 weekday work, 07:00–23:00 awake, 2h/day cap.
     public static func makeDefault() -> ConstraintProfile {

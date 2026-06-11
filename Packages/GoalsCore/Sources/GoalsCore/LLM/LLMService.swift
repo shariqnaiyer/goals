@@ -7,10 +7,12 @@ import Foundation
 /// testable without a network.
 public protocol LLMService: Sendable {
 
-    /// Onboarding interview turn (use #1). Returns an updated `GoalSpec` and the
-    /// assistant's next message. When `spec.isComplete` is true the app may
-    /// proceed to plan generation.
-    func interview(history: [ChatMessage], draft: GoalSpec?) async throws -> InterviewResult
+    /// Onboarding turn (use #1) — one step of the multi-stage Guided Discovery
+    /// Interview. The whole `OnboardingState` is client-held and re-sent each
+    /// turn (the proxy is stateless); the model returns an updated state, the
+    /// coach's next line, and chips. Whether the app may formalize is decided by
+    /// `ConcretenessCheck`, not the model's `stage`.
+    func onboardingTurn(state: OnboardingState, latestUserText: String) async throws -> OnboardingTurnResult
 
     /// Goal decomposition (use #2).
     func generatePlan(spec: GoalSpec, profile: ConstraintProfile) async throws -> PlanProposal
@@ -33,14 +35,6 @@ public protocol LLMService: Sendable {
     func reviewNarrative(snapshot: PerformanceSnapshot, plan: Plan) async throws -> String
 }
 
-public struct InterviewResult: Sendable, Hashable {
-    public var spec: GoalSpec
-    public var assistantMessage: String
-    public init(spec: GoalSpec, assistantMessage: String) {
-        self.spec = spec
-        self.assistantMessage = assistantMessage
-    }
-}
 
 public struct CoachReply: Sendable, Hashable {
     public var message: String
@@ -67,10 +61,10 @@ public enum LLMError: Error, Sendable, Equatable {
 /// the correct server-side prompt (docs/PLAN.md §3.2) and the eval suite can key
 /// golden outputs by version.
 public enum PromptVersion {
-    public static let interview = "interview-v1"
+    public static let onboarding = "onboarding-v1"
     public static let planGeneration = "plan-generation-v1"
     public static let replan = "replan-v1"
     public static let coach = "coach-v1"
     public static let review = "review-v1"
-    public static let schema = "schema-v1"
+    public static let schema = "schema-v2"
 }

@@ -8,15 +8,21 @@ public struct PlanProposal: Codable, Sendable, Hashable {
     public var successCriteria: String
     public var milestones: [ProposedMilestone]
     public var templates: [ProposedTemplate]
+    /// The concrete object this goal is about (the specific book + chapters).
+    /// Goal-level — `materialise` lifts it onto `Goal.specifics`. Optional so
+    /// old proposals decode unchanged.
+    public var specifics: GoalSpecifics?
 
     public init(goalTitle: String,
                 successCriteria: String,
                 milestones: [ProposedMilestone],
-                templates: [ProposedTemplate]) {
+                templates: [ProposedTemplate],
+                specifics: GoalSpecifics? = nil) {
         self.goalTitle = goalTitle
         self.successCriteria = successCriteria
         self.milestones = milestones
         self.templates = templates
+        self.specifics = specifics
     }
 }
 
@@ -51,6 +57,9 @@ public struct ProposedTemplate: Codable, Sendable, Hashable {
     public var preferredTimeOfDay: TimeOfDay?
     public var flexibility: Flexibility
     public var minimumViableVariant: String?
+    /// How this template draws sessions from the goal's specifics (walk a chapter
+    /// list, rotate routines). Optional so old proposals decode unchanged.
+    public var detail: TemplateDetail?
 
     public init(title: String,
                 milestoneKey: String?,
@@ -61,7 +70,8 @@ public struct ProposedTemplate: Codable, Sendable, Hashable {
                 intervalDays: Int,
                 preferredTimeOfDay: TimeOfDay?,
                 flexibility: Flexibility,
-                minimumViableVariant: String?) {
+                minimumViableVariant: String?,
+                detail: TemplateDetail? = nil) {
         self.title = title
         self.milestoneKey = milestoneKey
         self.effortMinutes = effortMinutes
@@ -72,6 +82,7 @@ public struct ProposedTemplate: Codable, Sendable, Hashable {
         self.preferredTimeOfDay = preferredTimeOfDay
         self.flexibility = flexibility
         self.minimumViableVariant = minimumViableVariant
+        self.detail = detail
     }
 
     func recurrence() -> RecurrenceRule {
@@ -93,7 +104,8 @@ public extension PlanProposal {
                         targetDate: spec.targetCalendarDay(calendar: calendar),
                         status: .active,
                         createdAt: now,
-                        weeklyBudgetMinutes: spec.weeklyBudgetMinutes)
+                        weeklyBudgetMinutes: spec.weeklyBudgetMinutes,
+                        specifics: specifics)
 
         var keyToID: [String: UUID] = [:]
         let milestones = milestones.sorted { $0.order < $1.order }.map { pm -> Milestone in
@@ -123,7 +135,8 @@ public extension PlanProposal {
                                 recurrence: pt.recurrence(),
                                 preferredWindows: windows,
                                 flexibility: pt.flexibility,
-                                minimumViableVariant: pt.minimumViableVariant)
+                                minimumViableVariant: pt.minimumViableVariant,
+                                detail: pt.detail)
         }
 
         return Plan(goal: goal, milestones: milestones, templates: templates)

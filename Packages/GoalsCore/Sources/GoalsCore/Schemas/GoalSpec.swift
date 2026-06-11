@@ -14,10 +14,14 @@ public struct GoalSpec: Codable, Sendable, Hashable {
     public var targetDate: String?
     public var currentLevel: String
     public var weeklyBudgetMinutes: Int
-    /// Whether the interview gathered enough to generate a plan.
+    /// Whether the interview gathered enough to generate a plan. **Advisory** in
+    /// the redesigned onboarding — `ConcretenessCheck` is authoritative.
     public var isComplete: Bool
     /// If `isComplete` is false, the single best next question to ask.
     public var nextQuestion: String?
+    /// The concrete object this goal is about (the specific book + chapters),
+    /// carried from onboarding into plan generation. Optional so old specs decode.
+    public var specifics: GoalSpecifics?
 
     public init(title: String,
                 motivationStatement: String,
@@ -27,7 +31,8 @@ public struct GoalSpec: Codable, Sendable, Hashable {
                 currentLevel: String,
                 weeklyBudgetMinutes: Int,
                 isComplete: Bool,
-                nextQuestion: String?) {
+                nextQuestion: String?,
+                specifics: GoalSpecifics? = nil) {
         self.title = title
         self.motivationStatement = motivationStatement
         self.type = type
@@ -37,6 +42,7 @@ public struct GoalSpec: Codable, Sendable, Hashable {
         self.weeklyBudgetMinutes = weeklyBudgetMinutes
         self.isComplete = isComplete
         self.nextQuestion = nextQuestion
+        self.specifics = specifics
     }
 
     public func targetCalendarDay(calendar: Calendar) -> CalendarDay? {

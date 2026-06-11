@@ -47,6 +47,12 @@ protocol ConstraintRepository {
 }
 
 @MainActor
+protocol UserProfileRepository {
+    func userProfile() -> UserProfile
+    func save(_ profile: UserProfile)
+}
+
+@MainActor
 protocol AppStateRepository {
     func hasCompletedOnboarding() -> Bool
     func setCompletedOnboarding(_ value: Bool)
@@ -58,7 +64,8 @@ protocol AppStateRepository {
 
 @MainActor
 final class SwiftDataStore: GoalRepository, ScheduleRepository, RevisionRepository,
-                            ChatRepository, ConstraintRepository, AppStateRepository {
+                            ChatRepository, ConstraintRepository, UserProfileRepository,
+                            AppStateRepository {
     let context: ModelContext
 
     init(context: ModelContext) {
@@ -207,6 +214,21 @@ final class SwiftDataStore: GoalRepository, ScheduleRepository, RevisionReposito
             existing.payload = JSON.encode(profile)
         } else {
             context.insert(SDConstraintProfile(profile: profile))
+        }
+        saveContext()
+    }
+
+    // MARK: UserProfileRepository
+
+    func userProfile() -> UserProfile {
+        fetch(SDUserProfile.self).first?.domain ?? UserProfile()
+    }
+
+    func save(_ profile: UserProfile) {
+        if let existing = fetch(SDUserProfile.self).first {
+            existing.payload = JSON.encode(profile)
+        } else {
+            context.insert(SDUserProfile(profile: profile))
         }
         saveContext()
     }

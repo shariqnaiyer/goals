@@ -27,12 +27,18 @@ struct LLMClient: LLMService {
 
     // MARK: LLMService
 
-    func interview(history: [ChatMessage], draft: GoalSpec?) async throws -> InterviewResult {
-        struct Req: Encodable { let history: [WireMessage]; let draft: GoalSpec? }
-        struct Res: Decodable { let spec: GoalSpec; let assistantMessage: String }
-        let res: Res = try await call(task: "interview", version: PromptVersion.interview,
-                                      payload: Req(history: history.map(WireMessage.init), draft: draft))
-        return InterviewResult(spec: res.spec, assistantMessage: res.assistantMessage)
+    func onboardingTurn(state: OnboardingState, latestUserText: String) async throws -> OnboardingTurnResult {
+        struct Req: Encodable { let state: OnboardingState; let latestUserText: String }
+        struct Res: Decodable {
+            let state: OnboardingState
+            let assistantMessage: String
+            let choices: [String]?
+            let stage: OnboardingStage
+        }
+        let res: Res = try await call(task: "onboardingTurn", version: PromptVersion.onboarding,
+                                      payload: Req(state: state, latestUserText: latestUserText))
+        return OnboardingTurnResult(state: res.state, assistantMessage: res.assistantMessage,
+                                    choices: res.choices ?? [], stage: res.stage)
     }
 
     func generatePlan(spec: GoalSpec, profile: ConstraintProfile) async throws -> PlanProposal {

@@ -170,6 +170,12 @@ private struct TaskRow: View {
                     .font(AppFont.body)
                     .strikethrough(isDone, color: Palette.textTertiary)
                     .foregroundStyle(isDone ? Palette.textTertiary : Palette.textPrimary)
+                if let slice = occ.slice {
+                    // The concrete content of this session ("Chapter 4").
+                    Text(slice.label)
+                        .font(AppFont.subhead)
+                        .foregroundStyle(isDone ? Palette.textTertiary : Palette.accent)
+                }
                 Text("\(item.goalTitle) · \(Format.window(occ.window)) · \(Format.duration(occ.effortMinutes))")
                     .font(AppFont.footnote).foregroundStyle(Palette.textTertiary)
             }

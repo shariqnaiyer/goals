@@ -9,47 +9,125 @@ public struct MockLLMService: LLMService {
     public var calendar: Calendar
     public init(calendar: Calendar = .current) { self.calendar = calendar }
 
-    // MARK: Interview
+    // MARK: Onboarding (the Guided Discovery Interview stage machine)
 
-    public func interview(history: [ChatMessage], draft: GoalSpec?) async throws -> InterviewResult {
-        let userTurns = history.filter { $0.role == .user }
-        let latest = userTurns.last?.text ?? ""
-        let combined = userTurns.map(\.text).joined(separator: " ").lowercased()
+    /// A deterministic, coverage-driven stage machine — the executable offline
+    /// spec for the onboarding contract. Mirrors what the proxy prompt asks the
+    /// real model to do: ground → surface → concretize (probe one dimension per
+    /// turn, inferring the rest) → readyToFormalize. Swift's `ConcretenessCheck`,
+    /// not this code, is authoritative about whether formalizing is allowed.
+    public func onboardingTurn(state: OnboardingState,
+                               latestUserText: String) async throws -> OnboardingTurnResult {
+        var s = state
+        s.turnCount += 1
+        let text = latestUserText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var spec = draft ?? GoalSpec(
-            title: "", motivationStatement: "", type: .outcome, successCriteria: "",
-            targetDate: nil, currentLevel: "", weeklyBudgetMinutes: 0,
-            isComplete: false, nextQuestion: nil)
+        switch s.stage {
+        case .grounding:        return ground(&s, text)
+        case .surfacing:        return surface(&s, text)
+        case .concretizing:     return concretize(&s, text)
+        case .readyToFormalize: return readyResult(s)
+        }
+    }
 
-        // Turn 1: capture the aspiration.
-        if spec.title.isEmpty, !latest.isEmpty {
-            spec.title = derivedTitle(from: latest)
-            spec.motivationStatement = latest
-            spec.type = combined.contains("habit") || combined.contains("regular")
-                || combined.contains("every day") ? .habit : .outcome
-            spec.nextQuestion = "Love it. Is there a date you'd like to hit this by, or is it open-ended?"
-            spec.isComplete = false
-            return InterviewResult(spec: spec, assistantMessage: spec.nextQuestion!)
+    // MARK: Stage 1 — GROUND
+
+    private func ground(_ s: inout OnboardingState, _ text: String) -> OnboardingTurnResult {
+        if s.person.oneLine.isEmpty { s.person.oneLine = capitalizedFirst(condense(text)) }
+        if s.person.dailyShape.isEmpty { s.person.dailyShape = derivedDailyShape(text) }
+        if s.person.energyPattern == nil { s.person.energyPattern = derivedEnergy(text) }
+        if s.person.longTermTheme == nil { s.person.longTermTheme = derivedTheme(text) }
+
+        guard s.person.isGrounded else {
+            return OnboardingTurnResult(
+                state: s,
+                assistantMessage: "Got it. What does a normal weekday actually look like for you?",
+                stage: .grounding)
+        }
+        s.stage = .surfacing
+        return OnboardingTurnResult(
+            state: s,
+            assistantMessage: "Here's what I'm picking up: \(s.person.oneLine). \(s.person.dailyShape) "
+                + "What are one to three things you've been wanting to change?",
+            stage: .surfacing)
+    }
+
+    // MARK: Stage 2 — SURFACE
+
+    private func surface(_ s: inout OnboardingState, _ text: String) -> OnboardingTurnResult {
+        if s.aspirations.isEmpty {
+            s.aspirations = parseAspirations(from: text)
+            guard !s.aspirations.isEmpty else {
+                return OnboardingTurnResult(
+                    state: s,
+                    assistantMessage: "No wrong answers — even a vague itch counts. What's one thing you'd love to be different a few months from now?",
+                    stage: .surfacing)
+            }
+            return OnboardingTurnResult(
+                state: s,
+                assistantMessage: "Here's how I'd frame these. Tap the one to three you want to start on now — the rest I'll keep for later.",
+                choices: s.aspirations.map(\.title),
+                stage: .surfacing)
         }
 
-        // Turn 2: deadline.
-        if spec.targetDate == nil, spec.currentLevel.isEmpty {
-            spec.targetDate = parseRoughDate(latest)
-            spec.nextQuestion = "Got it. Where are you starting from today — total beginner, or some experience?"
-            return InterviewResult(spec: spec, assistantMessage: spec.nextQuestion!)
+        // The view sets `focusAspirationIDs` from taps; if the user typed instead,
+        // match the text to a title, else default to the first.
+        if s.focusAspirationIDs.isEmpty {
+            let lower = text.lowercased()
+            if let matched = s.aspirations.first(where: {
+                !lower.isEmpty && ($0.title.lowercased().contains(lower) || lower.contains($0.title.lowercased()))
+            }) {
+                s.focusAspirationIDs = [matched.id]
+            } else {
+                s.focusAspirationIDs = [s.aspirations[0].id]
+            }
+        }
+        return beginConcretizing(&s, lead: "")
+    }
+
+    /// Point the probe loop at the first not-yet-concrete focus aspiration.
+    private func beginConcretizing(_ s: inout OnboardingState, lead: String) -> OnboardingTurnResult {
+        guard let next = s.focusAspirations.first(where: { !ConcretenessCheck.isConcrete($0) }) else {
+            s.concretizingID = nil
+            s.stage = .readyToFormalize
+            return readyResult(s)
+        }
+        s.concretizingID = next.id
+        s.stage = .concretizing
+        let p = probe(for: next)
+        return OnboardingTurnResult(state: s, assistantMessage: lead + p.message,
+                                    choices: p.choices, stage: .concretizing)
+    }
+
+    // MARK: Stage 3 — CONCRETIZE (one dimension per turn, infer the rest)
+
+    private func concretize(_ s: inout OnboardingState, _ text: String) -> OnboardingTurnResult {
+        guard let id = s.concretizingID, var asp = s.aspiration(id) else {
+            s.stage = .readyToFormalize
+            return readyResult(s)
         }
 
-        // Turn 3: current level + time budget, then complete.
-        if spec.currentLevel.isEmpty {
-            spec.currentLevel = latest.isEmpty ? "beginner" : latest
+        applyProbeAnswer(&asp, text: text)
+        // Safety net: never loop forever on one goal.
+        if s.turnCount > 14 { forceConcrete(&asp) }
+        s.update(asp)
+
+        if !ConcretenessCheck.isConcrete(asp) {
+            let p = probe(for: asp)
+            return OnboardingTurnResult(state: s, assistantMessage: p.message,
+                                        choices: p.choices, stage: .concretizing)
         }
-        spec.weeklyBudgetMinutes = parseWeeklyMinutes(combined) ?? 150
-        spec.successCriteria = "Make consistent, visible progress toward: \(spec.title)."
-        spec.isComplete = true
-        spec.nextQuestion = nil
-        return InterviewResult(
-            spec: spec,
-            assistantMessage: "Perfect — I've got enough to sketch a first plan. Here's what I'm thinking 👇")
+
+        asp.status = .concrete
+        s.update(asp)
+        return beginConcretizing(&s, lead: "Love it. Now — ")
+    }
+
+    private func readyResult(_ s: OnboardingState) -> OnboardingTurnResult {
+        OnboardingTurnResult(
+            state: s,
+            assistantMessage: "That's everything I need. Here's the plan — tweak anything, then we'll make it real. 👇",
+            stage: .readyToFormalize)
     }
 
     // MARK: Plan generation
@@ -68,6 +146,32 @@ public struct MockLLMService: LLMService {
                               completionCriteria: spec.successCriteria, targetDate: spec.targetDate)
         ]
 
+        // A concrete reading goal walks its chapters in order (the Sequencer
+        // stamps "Chapter N" onto each session); other goals use the generic
+        // two-template shape. Prefer the specifics onboarding already pinned down;
+        // fall back to detecting one from the title.
+        let providedReading: ReadingSpecifics? = {
+            if case .reading(let r)? = spec.specifics { return r }
+            return nil
+        }()
+        if let reading = providedReading ?? Self.readingSpecifics(forTitle: spec.title) {
+            let nights: [Weekday] = [.monday, .tuesday, .wednesday, .thursday, .sunday]
+            let templates = [
+                ProposedTemplate(title: "Reading session", milestoneKey: "m1",
+                                 effortMinutes: min(30, sessionMinutes), cadence: .timesPerWeek,
+                                 weekdays: nights, timesPerWeek: 5, intervalDays: 1,
+                                 preferredTimeOfDay: .evening, flexibility: .flexible,
+                                 minimumViableVariant: "Read 2 pages",
+                                 detail: .sequential)
+            ]
+            return PlanProposal(goalTitle: spec.title,
+                                successCriteria: spec.successCriteria.isEmpty
+                                    ? "Finish \(reading.bookTitle)." : spec.successCriteria,
+                                milestones: milestones,
+                                templates: templates,
+                                specifics: .reading(reading))
+        }
+
         let templates = [
             ProposedTemplate(title: theme.coreTask, milestoneKey: "m1",
                              effortMinutes: sessionMinutes, cadence: .timesPerWeek,
@@ -85,6 +189,38 @@ public struct MockLLMService: LLMService {
                             successCriteria: spec.successCriteria,
                             milestones: milestones,
                             templates: templates)
+    }
+
+    /// Heuristically detect a reading goal from its title and build a concrete
+    /// `ReadingSpecifics` (the specific book + numbered chapters). Returns nil for
+    /// non-reading goals so they keep the generic plan shape.
+    static func readingSpecifics(forTitle title: String) -> ReadingSpecifics? {
+        let t = title.lowercased()
+        let mentionsWriting = t.contains("write") || t.contains("writing")
+            || t.contains("author") || t.contains("blog") || t.contains("journal")
+        let mentionsReading = t.contains("read") || t.contains("chapter") || t.contains("pages")
+            || ((t.contains("book") || t.contains("novel")) && !mentionsWriting)
+        guard mentionsReading && !mentionsWriting else { return nil }
+
+        var name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["finish reading ", "read the book ", "read through ", "get through ",
+                       "finish ", "reading ", "read "] {
+            if name.lowercased().hasPrefix(prefix) {
+                name = String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+                break
+            }
+        }
+        if name.isEmpty || ["more", "books", "a book"].contains(name.lowercased()) {
+            name = "your book"
+        }
+        // "20 chapters" → 20, else a sensible default.
+        let count = firstNumber(in: t, near: ["chapter"]) ?? 12
+        return ReadingSpecifics.numbered(bookTitle: name, chapterCount: count)
+    }
+
+    private static func firstNumber(in text: String, near keywords: [String]) -> Int? {
+        guard keywords.contains(where: { text.contains($0) }) else { return nil }
+        return text.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }.first
     }
 
     // MARK: Replan
@@ -214,6 +350,192 @@ public struct MockLLMService: LLMService {
         guard keywords.contains(where: { text.contains($0) }) else { return nil }
         let numbers = text.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
         return numbers.first
+    }
+
+    // MARK: - Onboarding heuristics
+
+    private func condense(_ text: String) -> String {
+        let firstClause = text.split(whereSeparator: { ".!?".contains($0) }).first.map(String.init) ?? text
+        return String(firstClause.trimmingCharacters(in: .whitespacesAndNewlines).prefix(120))
+    }
+
+    private func derivedDailyShape(_ text: String) -> String {
+        let l = text.lowercased()
+        var parts: [String] = []
+        if l.contains("work") || l.contains("job") || l.contains("9-") || l.contains("9 to") { parts.append("workdays are full") }
+        if l.contains("kid") || l.contains("child") || l.contains("family") { parts.append("family time in the evenings") }
+        if l.contains("night") || l.contains("evening") || l.contains("pm") || l.contains("after") { parts.append("quietest once the day winds down") }
+        if parts.isEmpty {
+            return text.split(separator: " ").count >= 4 ? "balancing a busy schedule." : ""
+        }
+        return parts.joined(separator: ", ") + "."
+    }
+
+    private func derivedEnergy(_ text: String) -> String? {
+        let l = text.lowercased()
+        if l.contains("morning") { return "more energy in the mornings" }
+        if l.contains("night") || l.contains("evening") { return "comes alive in the evenings" }
+        return nil
+    }
+
+    private func derivedTheme(_ text: String) -> String? {
+        let l = text.lowercased()
+        if l.contains("health") || l.contains("fit") || l.contains("strong") { return "feeling healthier" }
+        if l.contains("calm") || l.contains("headspace") || l.contains("stress") || l.contains("mindful") { return "more headspace" }
+        if l.contains("learn") || l.contains("grow") || l.contains("career") { return "growing" }
+        return nil
+    }
+
+    private func parseAspirations(from text: String) -> [AspirationDraft] {
+        let separators = CharacterSet(charactersIn: ",;\n")
+        var phrases = text.components(separatedBy: separators)
+            .flatMap { $0.components(separatedBy: " and ") }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count >= 3 }
+        if phrases.isEmpty, text.count >= 3 { phrases = [text] }
+        return phrases.prefix(4).enumerated().map { (i, phrase) in
+            let l = phrase.lowercased()
+            let type: GoalType = (l.contains("habit") || l.contains("daily") || l.contains("every day")
+                                  || l.contains("meditat") || l.contains("regular")) ? .habit : .outcome
+            let horizon: GoalHorizon = (l.contains("career") || l.contains("become")
+                                        || l.contains("someday") || l.contains("long-term")) ? .longTerm : .shortTerm
+            return AspirationDraft(id: "asp_\(i)", rawWish: phrase, title: derivedTitle(from: phrase),
+                                   motivation: phrase, type: type, horizon: horizon)
+        }
+    }
+
+    private struct Probe { let message: String; let choices: [String] }
+
+    /// The question for the first unresolved dimension of `asp` — chips first, so
+    /// an undecided user always advances in one tap.
+    private func probe(for asp: AspirationDraft) -> Probe {
+        guard let dim = ConcretenessCheck.missingDimensions(asp).first else {
+            return Probe(message: "Anything you'd tweak before I draft this?", choices: [])
+        }
+        switch dim {
+        case .object:
+            if isReadingAspiration(asp) {
+                return Probe(message: "Which book's been on your list? A few that build momentum:",
+                             choices: ["Atomic Habits", "The Pragmatic Programmer", "I have one in mind"])
+            }
+            return Probe(message: "“\(asp.rawWish)” can go a few ways — what's the version that'd feel like a win?",
+                         choices: themedObjectChoices(asp))
+        case .startState:
+            return Probe(message: "Quick gut check so I don't overshoot — where are you starting from?",
+                         choices: ["Total beginner", "A little experience", "Getting back into it"])
+        case .targetState:
+            return Probe(message: "And what would actually count as success here?", choices: [])
+        case .cadence:
+            return Probe(message: "How many days a week feels realistic?",
+                         choices: ["A couple", "Most days", "Every day"])
+        case .capacity:
+            return Probe(message: "Roughly how long can each session be?",
+                         choices: ["15 minutes", "30 minutes", "An hour"])
+        }
+    }
+
+    /// Resolve the first unresolved dimension of `asp` from the user's answer,
+    /// inferring the rest where a confident default exists (the inference-first move).
+    private func applyProbeAnswer(_ asp: inout AspirationDraft, text: String) {
+        guard let dim = ConcretenessCheck.missingDimensions(asp).first else { return }
+        let lower = text.lowercased()
+        switch dim {
+        case .object:
+            if isReadingAspiration(asp) {
+                let book = bookName(from: text)
+                asp.specifics = .reading(.numbered(bookTitle: book, chapterCount: 12))
+                asp.title = "Finish \(book)"
+                asp.successCriteria = "Finish \(book)."
+                asp.type = .outcome
+                // Infer the rest from a typical quiet-evening reader.
+                if asp.suggestedTimesPerWeek == 0 { asp.suggestedTimesPerWeek = 5 }
+                if asp.weeklyBudgetMinutes == 0 { asp.weeklyBudgetMinutes = 105 }
+                resolve(&asp, .object, .startState, .targetState, .cadence, .capacity)
+            } else {
+                if !text.isEmpty { asp.title = capitalizedFirst(text) }
+                if asp.title.caseInsensitiveCompare(asp.rawWish) == .orderedSame || asp.title.isEmpty {
+                    asp.title = capitalizedFirst(asp.rawWish) + " — concretely"
+                }
+                resolve(&asp, .object)
+            }
+        case .startState:
+            if asp.motivation.isEmpty { asp.motivation = text }
+            resolve(&asp, .startState)
+        case .targetState:
+            asp.successCriteria = text.isEmpty
+                ? "Make visible progress on \(asp.title)."
+                : capitalizedFirst(text)
+            resolve(&asp, .targetState)
+        case .cadence:
+            asp.suggestedTimesPerWeek = parseTimesPerWeek(lower) ?? defaultTimes(for: asp)
+            resolve(&asp, .cadence)
+        case .capacity:
+            let perSession = parseWeeklyMinutes(lower) ?? 30
+            asp.weeklyBudgetMinutes = perSession * max(1, asp.suggestedTimesPerWeek)
+            resolve(&asp, .capacity)
+        }
+    }
+
+    /// Last-resort default fill so the probe loop always terminates.
+    private func forceConcrete(_ asp: inout AspirationDraft) {
+        if asp.title.isEmpty || asp.title.caseInsensitiveCompare(asp.rawWish) == .orderedSame {
+            asp.title = capitalizedFirst(asp.rawWish.isEmpty ? "My goal" : asp.rawWish) + " — a first plan"
+        }
+        if asp.successCriteria.isEmpty { asp.successCriteria = "Make steady progress on \(asp.title)." }
+        if asp.suggestedTimesPerWeek == 0 { asp.suggestedTimesPerWeek = defaultTimes(for: asp) }
+        if asp.weeklyBudgetMinutes == 0 { asp.weeklyBudgetMinutes = asp.suggestedTimesPerWeek * 30 }
+        resolve(&asp, .object, .startState, .targetState, .cadence, .capacity)
+    }
+
+    private func resolve(_ asp: inout AspirationDraft, _ dims: ConcretenessDimension...) {
+        var set = Set(asp.resolvedDimensions)
+        dims.forEach { set.insert($0) }
+        asp.resolvedDimensions = ConcretenessDimension.allCases.filter { set.contains($0) }
+    }
+
+    private func isReadingAspiration(_ asp: AspirationDraft) -> Bool {
+        if case .reading = asp.specifics { return true }
+        let t = (asp.rawWish + " " + asp.title).lowercased()
+        return t.contains("read") || t.contains("book") || t.contains("chapter")
+    }
+
+    private func themedObjectChoices(_ asp: AspirationDraft) -> [String] {
+        let t = asp.rawWish.lowercased()
+        if t.contains("fit") || t.contains("run") || t.contains("strong") || t.contains("gym") {
+            return ["Build strength", "Run without dying", "Just move daily"]
+        }
+        if t.contains("learn") || t.contains("language") || t.contains("spanish") || t.contains("code") {
+            return ["Conversational basics", "Pass a test", "Use it for real"]
+        }
+        return ["Get started small", "Build a steady habit", "Hit a clear milestone"]
+    }
+
+    private func bookName(from text: String) -> String {
+        var name = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["read the book ", "the book ", "reading ", "read "] {
+            if name.lowercased().hasPrefix(prefix) { name = String(name.dropFirst(prefix.count)) }
+        }
+        name = name.trimmingCharacters(in: CharacterSet(charactersIn: " \"'“”"))
+        if name.isEmpty || ["i have one in mind", "a specific book", "more", "books"].contains(name.lowercased()) {
+            return "Atomic Habits"
+        }
+        return capitalizedFirst(name)
+    }
+
+    private func parseTimesPerWeek(_ lower: String) -> Int? {
+        if lower.contains("every day") || lower.contains("daily") { return 7 }
+        if lower.contains("most") { return 5 }
+        if lower.contains("couple") || lower.contains("two") { return 2 }
+        if lower.contains("three") { return 3 }
+        if let n = lower.split(whereSeparator: { !$0.isNumber }).compactMap({ Int($0) }).first {
+            return min(7, max(1, n))
+        }
+        return nil
+    }
+
+    private func defaultTimes(for asp: AspirationDraft) -> Int {
+        if isReadingAspiration(asp) || asp.type == .habit { return 5 }
+        return 3
     }
 }
 

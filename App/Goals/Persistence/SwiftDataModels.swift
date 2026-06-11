@@ -132,6 +132,18 @@ final class SDConstraintProfile {
 }
 
 @Model
+final class SDUserProfile {
+    @Attribute(.unique) var id: String   // singleton key "default"
+    var payload: Data
+
+    init(profile: UserProfile) {
+        self.id = "default"
+        self.payload = JSON.encode(profile)
+    }
+    var domain: UserProfile? { JSON.decode(UserProfile.self, from: payload) }
+}
+
+@Model
 final class SDAppState {
     @Attribute(.unique) var id: String   // singleton key "app"
     var lastReviewDate: Date?
@@ -167,6 +179,7 @@ enum JSON {
 enum AppSchema {
     static let models: [any PersistentModel.Type] = [
         SDGoal.self, SDMilestone.self, SDTemplate.self, SDOccurrence.self,
-        SDRevision.self, SDChatMessage.self, SDConstraintProfile.self, SDAppState.self
+        SDRevision.self, SDChatMessage.self, SDConstraintProfile.self,
+        SDUserProfile.self, SDAppState.self
     ]
 }

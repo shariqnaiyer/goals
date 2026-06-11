@@ -53,6 +53,12 @@ final class SchedulingCoordinator {
             if let w = occ.window { busyByDay[occ.day, default: []].append(w) }
         }
 
+        // Series units already completed must not be handed out again by the
+        // Sequencer below — that would falsify progress (re-offering a read chapter).
+        let consumedUnitIDs = Set(existing
+            .filter { $0.status == .done }
+            .compactMap { $0.slice?.unitID })
+
         schedule.deletePending(goalID: goalID, from: clock.today)
 
         let input = Scheduler.Input(
@@ -65,7 +71,14 @@ final class SchedulingCoordinator {
             anchorDay: CalendarDay(date: plan.goal.createdAt, calendar: clock.calendar),
             calendar: clock.calendar)
 
-        let output = Scheduler().schedule(input)
+        var output = Scheduler().schedule(input)
+        // Layer 1.5: stamp concrete content ("Chapter 4") onto sequential sessions.
+        // No-op for goals without specifics, so legacy goals are unaffected.
+        output.occurrences = Sequencer.assignSlices(
+            pending: output.occurrences,
+            specifics: plan.goal.specifics,
+            templates: plan.activeTemplates,
+            consumedUnitIDs: consumedUnitIDs)
         schedule.upsert(output.occurrences)
         refreshNotifications()
         return output
