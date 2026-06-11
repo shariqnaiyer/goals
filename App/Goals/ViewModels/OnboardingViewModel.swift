@@ -18,7 +18,9 @@ final class OnboardingViewModel {
         case confirmingConstraints                 // confirm the week
         case generatingPlan
         case reviewingProposal                     // editable plan card(s)
-        case creating, finished
+        case creating
+        case connectCalendar                       // optional, post-plan, skippable
+        case finished
     }
 
     private let app: AppContainer
@@ -81,7 +83,13 @@ final class OnboardingViewModel {
         isAssistantTyping = true
         defer { isAssistantTyping = false }
         do {
-            let result = try await app.llm.onboardingTurn(state: state, latestUserText: userText)
+            // Hand the model the app's authoritative readiness verdict so it
+            // probes the exact gaps (and fills the state fields the gate checks)
+            // instead of optimistically declaring the plan ready every turn.
+            let unmet = ConcretenessCheck.blockers(
+                state, availableWeeklyMinutes: constraintDraft.weeklyCapacityMinutes)
+            let result = try await app.llm.onboardingTurn(
+                state: state, latestUserText: userText, unmetRequirements: unmet)
             apply(result)
         } catch {
             errorMessage = friendly(error)
@@ -99,14 +107,15 @@ final class OnboardingViewModel {
         case .concretizing: phase = .concretizing
         case .readyToFormalize:
             // The model's "ready" is advisory — Swift's gate is authoritative.
+            // When it disagrees we drop back to probing silently: the model was
+            // handed the same unmet-requirements list this turn, so its own
+            // message already targets the gap. Re-appending a canned blocker
+            // here is what produced the repeating "Before I lock this in…"
+            // bubbles, so we no longer do that.
             if ConcretenessCheck.canFormalize(state, availableWeeklyMinutes: constraintDraft.weeklyCapacityMinutes) {
                 phase = .confirmingConstraints
             } else {
                 phase = .concretizing
-                let notes = ConcretenessCheck.blockers(state, availableWeeklyMinutes: constraintDraft.weeklyCapacityMinutes)
-                if let first = notes.first {
-                    appendAssistant("Before I lock this in — \(first). Let's sort that.")
-                }
             }
         }
     }
@@ -198,6 +207,39 @@ final class OnboardingViewModel {
         for plan in editablePlans {
             app.scheduling.reschedule(goalID: plan.goal.id)
         }
+        // The plan exists and onboarding is marked complete (killing the app
+        // here still lands in the main tabs). Now — and only now — offer the
+        // optional calendar connection, so the pitch is concrete: "make this
+        // schedule respect your real meetings."
+        if Config.googleSignInAvailable,
+           app.integrations.status(for: .googleCalendar) == .notConnected {
+            phase = .connectCalendar
+        } else {
+            phase = .finished
+        }
+    }
+
+    // MARK: Optional calendar connect (post-plan)
+
+    var isConnectingCalendar = false
+
+    func connectCalendar() async {
+        isConnectingCalendar = true
+        defer { isConnectingCalendar = false }
+        do {
+            try await app.integrations.google.connect()
+            // Re-place the fresh schedule around the imported busy times.
+            await app.integrations.refreshBusyAndRescheduleIfChanged()
+            phase = .finished
+        } catch is CancellationError {
+            // Closed the sheet — stay on the card; "Maybe later" still works.
+        } catch {
+            errorMessage = friendly(error)
+            phase = .finished   // never strand onboarding on a failed extra
+        }
+    }
+
+    func skipCalendar() {
         phase = .finished
     }
 

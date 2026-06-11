@@ -70,6 +70,26 @@ struct SettingsView: View {
                 LabeledContent("AI mode", value: model.usingLiveBackend ? "Live coach" : "Offline (on-device demo)")
             }
 
+            Section("Connected apps") {
+                NavigationLink {
+                    IntegrationsView()
+                } label: {
+                    HStack {
+                        Label {
+                            Text("Integrations")
+                        } icon: {
+                            Image(systemName: "link").foregroundStyle(Palette.textSecondary)
+                        }
+                        Spacer()
+                        Text(app.integrations.connectedCount > 0
+                             ? "\(app.integrations.connectedCount) connected"
+                             : "Connect your calendar")
+                            .font(AppFont.caption1)
+                            .foregroundStyle(Palette.textTertiary)
+                    }
+                }
+            }
+
             Section {
                 Button {
                     if let data = model.exportJSON() {

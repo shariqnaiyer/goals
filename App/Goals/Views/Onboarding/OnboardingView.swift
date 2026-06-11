@@ -43,9 +43,14 @@ struct OnboardingView: View {
                 ChatBubble(message: message).transition(.fadeUp)
             }
 
-            // Probe chips (book choices, "most days", …) — one tap always advances.
+            // Probe chips (book choices, "most days", …) — one tap always
+            // advances. Shown in every conversational stage: surfacing turns
+            // offer candidate goals as chips too, and hiding them strands the
+            // user when the model says "pick one of these" (the GoalSetCard
+            // only covers turns where aspirations are populated).
             if !model.currentChoices.isEmpty && !model.isChoosingGoals
-                && (model.phase == .grounding || model.phase == .concretizing) {
+                && (model.phase == .grounding || model.phase == .surfacing
+                    || model.phase == .concretizing) {
                 FlowChips(choices: model.currentChoices) { choice in
                     Task { await model.choose(choice) }
                 }
@@ -78,6 +83,15 @@ struct OnboardingView: View {
                                      set: { model.constraintDraft = $0 }),
                     weeklyLoad: model.combinedWeeklyMinutes,
                     onConfirm: { Task { await model.confirmConstraints() } })
+                    .transition(.fadeUp)
+            }
+
+            // Post-plan extra: offer the calendar connection now that there's a
+            // concrete schedule to protect. Entirely skippable.
+            if model.phase == .connectCalendar {
+                ConnectCalendarCard(isWorking: model.isConnectingCalendar,
+                                    onConnect: { Task { await model.connectCalendar() } },
+                                    onSkip: { model.skipCalendar() })
                     .transition(.fadeUp)
             }
 
@@ -138,7 +152,7 @@ private struct StageRail: View {
         case .surfacing: return 1
         case .concretizing: return 2
         case .confirmingConstraints, .generatingPlan: return 3
-        case .reviewingProposal, .creating, .finished: return 4
+        case .reviewingProposal, .creating, .connectCalendar, .finished: return 4
         }
     }
 
@@ -203,6 +217,42 @@ private struct GoalSetCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
+    }
+}
+
+// MARK: - Connect calendar card
+
+/// Post-plan optional extra: connect Google Calendar so the fresh schedule
+/// respects real meetings from day one. One clear action, quiet skip.
+private struct ConnectCalendarCard: View {
+    let isWorking: Bool
+    var onConnect: () -> Void
+    var onSkip: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metric.s3) {
+            SectionLabel("One more thing — optional")
+            HStack(spacing: Metric.s3) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 28))
+                    .foregroundStyle(Palette.accent)
+                Text("Connect Google Calendar and I'll schedule your sessions around your real meetings.")
+                    .font(AppFont.subhead).foregroundStyle(Palette.textSecondary)
+            }
+            Button(action: onConnect) {
+                if isWorking { ProgressView() } else { Text("Connect Google Calendar") }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(isWorking)
+            Button(action: onSkip) {
+                Text("Maybe later")
+                    .font(AppFont.subhead).foregroundStyle(Palette.textTertiary)
+                    .frame(maxWidth: .infinity)
+            }
+            .disabled(isWorking)
+        }
+        .padding(Metric.s4)
+        .card()
     }
 }
 

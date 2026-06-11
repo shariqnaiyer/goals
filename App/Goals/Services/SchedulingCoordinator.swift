@@ -15,6 +15,14 @@ final class SchedulingCoordinator {
     private let clock: Clock
     private let horizonDays: Int
 
+    /// External busy time (calendar integrations), merged into `busyByDay`
+    /// before placement. A closure (wired in AppContainer) rather than the
+    /// integration service itself, to keep the dependency direction clean.
+    var externalBusy: (() -> [CalendarDay: [MinuteWindow]])?
+    /// Fired after occurrences change, so integrations can mirror the schedule
+    /// outward (debounced on the receiving side).
+    var onScheduleChanged: (() -> Void)?
+
     init(goals: GoalRepository,
          schedule: ScheduleRepository,
          constraints: ConstraintRepository,
@@ -38,6 +46,7 @@ final class SchedulingCoordinator {
             // Paused/abandoned goals get their pending occurrences cleared.
             schedule.deletePending(goalID: goalID, from: clock.today)
             refreshNotifications()
+            onScheduleChanged?()
             return nil
         }
 
@@ -51,6 +60,12 @@ final class SchedulingCoordinator {
         var busyByDay: [CalendarDay: [MinuteWindow]] = [:]
         for occ in existing where occ.status != .pending {
             if let w = occ.window { busyByDay[occ.day, default: []].append(w) }
+        }
+
+        // External commitments (e.g. Google Calendar events) block placement
+        // the same way. Read from the local cache — works offline.
+        for (day, windows) in externalBusy?() ?? [:] {
+            busyByDay[day, default: []] += windows
         }
 
         // Series units already completed must not be handed out again by the
@@ -81,6 +96,7 @@ final class SchedulingCoordinator {
             consumedUnitIDs: consumedUnitIDs)
         schedule.upsert(output.occurrences)
         refreshNotifications()
+        onScheduleChanged?()
         return output
     }
 

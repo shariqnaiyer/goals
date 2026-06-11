@@ -56,6 +56,29 @@ cd ../../.. && cd App && xcodegen generate
 `Secrets.xcconfig` is git-ignored. With it set, `AppContainer` selects the
 networking `LLMClient` instead of the mock (see `App/Goals/App/Config.swift`).
 
+## 4. (Optional) Enable the Google Calendar integration
+
+The app schedules around your calendar and can export sessions to a dedicated
+"Goals" calendar. Without these steps the integration simply shows as
+"setup required" — everything else works.
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create (or
+   pick) a project and enable the **Google Calendar API**.
+2. Configure the OAuth consent screen (External; **Testing** mode is fine for
+   development — add your Google account as a test user). Add the scopes
+   `…/auth/calendar.readonly` and `…/auth/calendar.app.created`.
+3. Credentials → *Create OAuth client ID* → **iOS**, bundle ID
+   `com.shariqnaiyer.goals`. Copy the client ID.
+4. In `App/Goals/Resources/Secrets.xcconfig`, set:
+
+   ```
+   GOOGLE_OAUTH_CLIENT_ID = <your-client-id>.apps.googleusercontent.com
+   GOOGLE_OAUTH_REVERSED_CLIENT_ID = com.googleusercontent.apps.<your-client-id>
+   ```
+
+5. `cd App && xcodegen generate` (resolves the GoogleSignIn package and injects
+   the plist keys), then build.
+
 ## Project layout
 
 ```

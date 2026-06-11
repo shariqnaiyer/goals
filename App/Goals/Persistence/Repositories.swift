@@ -60,12 +60,24 @@ protocol AppStateRepository {
     func setLastReviewDate(_ date: Date)
 }
 
+@MainActor
+protocol IntegrationRepository {
+    func integrationState(_ kind: IntegrationKind) -> IntegrationState?
+    func save(_ state: IntegrationState)
+    func syncedEvents() -> [SyncedEventRecord]
+    /// Wholesale replace after a sync pass (small sets; simplest correct path).
+    func replaceSyncedEvents(_ records: [SyncedEventRecord])
+    func busyCache(_ kind: IntegrationKind) -> (fetchedAt: Date, cache: CachedBusyWindows)?
+    func saveBusyCache(_ kind: IntegrationKind, cache: CachedBusyWindows, fetchedAt: Date)
+    func clearIntegrationData(_ kind: IntegrationKind)
+}
+
 // MARK: - SwiftData implementations
 
 @MainActor
 final class SwiftDataStore: GoalRepository, ScheduleRepository, RevisionRepository,
                             ChatRepository, ConstraintRepository, UserProfileRepository,
-                            AppStateRepository {
+                            AppStateRepository, IntegrationRepository {
     let context: ModelContext
 
     init(context: ModelContext) {
@@ -246,6 +258,65 @@ final class SwiftDataStore: GoalRepository, ScheduleRepository, RevisionReposito
     func setCompletedOnboarding(_ value: Bool) { appState().hasCompletedOnboarding = value; saveContext() }
     func lastReviewDate() -> Date? { appState().lastReviewDate }
     func setLastReviewDate(_ date: Date) { appState().lastReviewDate = date; saveContext() }
+
+    // MARK: IntegrationRepository
+
+    func integrationState(_ kind: IntegrationKind) -> IntegrationState? {
+        let key = kind.rawValue
+        return fetch(SDIntegration.self, predicate: #Predicate { $0.id == key }).first?.domain
+    }
+
+    func save(_ state: IntegrationState) {
+        let key = state.kind.rawValue
+        if let existing = fetch(SDIntegration.self, predicate: #Predicate { $0.id == key }).first {
+            existing.isConnected = state.isConnected
+            existing.payload = JSON.encode(state)
+        } else {
+            context.insert(SDIntegration(state: state))
+        }
+        saveContext()
+    }
+
+    func syncedEvents() -> [SyncedEventRecord] {
+        fetch(SDSyncedEvent.self).compactMap(\.domain)
+    }
+
+    func replaceSyncedEvents(_ records: [SyncedEventRecord]) {
+        for item in fetch(SDSyncedEvent.self) { context.delete(item) }
+        for record in records { context.insert(SDSyncedEvent(record: record)) }
+        saveContext()
+    }
+
+    func busyCache(_ kind: IntegrationKind) -> (fetchedAt: Date, cache: CachedBusyWindows)? {
+        let key = kind.rawValue
+        guard let sd = fetch(SDBusyCache.self, predicate: #Predicate { $0.id == key }).first,
+              let cache = sd.domain else { return nil }
+        return (sd.fetchedAt, cache)
+    }
+
+    func saveBusyCache(_ kind: IntegrationKind, cache: CachedBusyWindows, fetchedAt: Date) {
+        let key = kind.rawValue
+        if let existing = fetch(SDBusyCache.self, predicate: #Predicate { $0.id == key }).first {
+            existing.fetchedAt = fetchedAt
+            existing.payload = JSON.encode(cache)
+        } else {
+            context.insert(SDBusyCache(kind: kind, cache: cache, fetchedAt: fetchedAt))
+        }
+        saveContext()
+    }
+
+    /// Remove an integration's connection state, busy cache and sync records
+    /// (used on disconnect). Provider-side cleanup happens before this.
+    func clearIntegrationData(_ kind: IntegrationKind) {
+        let key = kind.rawValue
+        delete(SDIntegration.self, predicate: #Predicate { $0.id == key })
+        delete(SDBusyCache.self, predicate: #Predicate { $0.id == key })
+        // Synced events are only produced by Google Calendar in v1.
+        if kind == .googleCalendar {
+            for item in fetch(SDSyncedEvent.self) { context.delete(item) }
+        }
+        saveContext()
+    }
 
     // MARK: Fetch helpers
 

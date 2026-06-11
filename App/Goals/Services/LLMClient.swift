@@ -27,8 +27,13 @@ struct LLMClient: LLMService {
 
     // MARK: LLMService
 
-    func onboardingTurn(state: OnboardingState, latestUserText: String) async throws -> OnboardingTurnResult {
-        struct Req: Encodable { let state: OnboardingState; let latestUserText: String }
+    func onboardingTurn(state: OnboardingState, latestUserText: String,
+                        unmetRequirements: [String]) async throws -> OnboardingTurnResult {
+        struct Req: Encodable {
+            let state: OnboardingState
+            let latestUserText: String
+            let unmetRequirements: [String]
+        }
         struct Res: Decodable {
             let state: OnboardingState
             let assistantMessage: String
@@ -36,7 +41,8 @@ struct LLMClient: LLMService {
             let stage: OnboardingStage
         }
         let res: Res = try await call(task: "onboardingTurn", version: PromptVersion.onboarding,
-                                      payload: Req(state: state, latestUserText: latestUserText))
+                                      payload: Req(state: state, latestUserText: latestUserText,
+                                                   unmetRequirements: unmetRequirements))
         return OnboardingTurnResult(state: res.state, assistantMessage: res.assistantMessage,
                                     choices: res.choices ?? [], stage: res.stage)
     }

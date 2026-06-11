@@ -19,6 +19,7 @@ final class AppContainer {
     let planEngine: PlanEngine
     let taskActions: TaskActionService
     let coach: CoachService
+    let integrations: IntegrationService
 
     /// True when talking to the real proxy; false when using the offline mock.
     let usingLiveBackend: Bool
@@ -59,6 +60,21 @@ final class AppContainer {
 
         self.coach = CoachService(chat: store, goals: store, performance: performance,
                                   llm: llm, clock: clock)
+
+        // Integrations: Google Calendar provider + the registry hub. Wired to
+        // the scheduler via closures so the dependency direction stays
+        // scheduler ← container → integrations (no cycle).
+        let googleAuth = GoogleAuthService()
+        let google = GoogleCalendarIntegration(
+            auth: googleAuth,
+            client: GoogleCalendarClient(tokenProvider: { try await googleAuth.freshAccessToken() }),
+            repo: store,
+            clock: clock)
+        let integrations = IntegrationService(google: google, schedule: store, clock: clock)
+        self.integrations = integrations
+        integrations.reschedule = { [weak scheduling] in scheduling?.rescheduleAll() }
+        scheduling.externalBusy = { [weak integrations] in integrations?.cachedBusyByDay() ?? [:] }
+        scheduling.onScheduleChanged = { [weak integrations] in integrations?.scheduleExport() }
     }
 
     /// Run on launch: ensure a constraint profile exists, register notification

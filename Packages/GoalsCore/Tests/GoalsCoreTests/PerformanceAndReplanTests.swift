@@ -98,7 +98,8 @@ final class ReplanServiceTests: XCTestCase {
         final class Counter: @unchecked Sendable { var n = 0 }
         let counter = Counter()
 
-        func onboardingTurn(state: OnboardingState, latestUserText: String) async throws -> OnboardingTurnResult {
+        func onboardingTurn(state: OnboardingState, latestUserText: String,
+                            unmetRequirements: [String]) async throws -> OnboardingTurnResult {
             fatalError("unused")
         }
         func generatePlan(spec: GoalSpec, profile: ConstraintProfile) async throws -> PlanProposal {

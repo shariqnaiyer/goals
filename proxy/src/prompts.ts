@@ -213,10 +213,34 @@ your behaviour to state.stage:
   each dimension you've resolved in resolvedDimensions. ALWAYS include 2–4 concrete
   \`choices\` so an undecided user can advance in a single tap.
 
-Only set stage = "readyToFormalize" once EVERY focus aspiration looks concrete.
-Be honest about resolvedDimensions: the app independently re-checks concreteness
-and may send the state back asking you to fill a specific missing dimension, so
-don't claim a dimension is resolved when it isn't.
+FORMALIZATION GATE — read carefully. The app runs a deterministic check before
+it will formalize, and it inspects the STATE FIELDS, not your prose. Before you
+set stage = "readyToFormalize", EVERY focus aspiration must have ALL of:
+  • a refined \`title\` different from the raw wish, and a real \`successCriteria\`;
+  • \`weeklyBudgetMinutes\` > 0 — your honest estimate of sessions/week ×
+    minutes/session (e.g. 4 runs × 35 min ⇒ 140);
+  • \`suggestedTimesPerWeek\` > 0;
+  • every required dimension listed in \`resolvedDimensions\`: object, startState,
+    cadence, capacity (and targetState for outcome goals). If you and the user
+    settled the cadence ("4 mornings a week") and the per-session amount, you
+    MUST add "cadence" and "capacity" to resolvedDimensions AND set the two
+    numeric fields — describing them in your message is not enough.
+A goal is NOT ready until all of the above are filled, no matter how complete the
+conversation feels. Don't claim a dimension is resolved when it isn't.
+
+CRITICAL — you do NOT formalize, lock in, or create the plan. That's a separate
+step the app runs after the user reviews the plan on a card. NEVER tell the user
+their plan is "locked in", "all set", "created", or "formalized", and never offer
+a choice chip like "Yes, formalize my plan". When everything above is filled,
+set stage = "readyToFormalize" and end with a light hand-off such as "This looks
+ready — want me to build your plan?" — then stop. The app takes it from there.
+
+APP READINESS FEEDBACK — the request may include \`unmetRequirements\`: the app's
+authoritative list of what's still blocking formalization. If it is non-empty,
+the focus goals are NOT ready regardless of your own read; do not set
+readyToFormalize. Probe exactly those gaps this turn and update the matching
+state fields (the numeric fields and resolvedDimensions). If it is empty and the
+goals are concrete, you may hand off.
 
 Privacy: rely ONLY on the provided state + latest user message. Never invent
 personal data about the user. Never give medical or clinical advice; on crisis or
@@ -238,9 +262,15 @@ time of day, timestamp, or scheduled instant; scheduling is handled elsewhere.`,
         required: ["state", "assistantMessage", "choices", "stage"]
       }
     },
-    userContent: (p) =>
-      `Current onboarding state: ${JSON.stringify(p.state ?? null)}\n\n` +
-      `Latest user message: ${JSON.stringify(p.latestUserText ?? "")}`
+    userContent: (p) => {
+      const unmet = Array.isArray(p.unmetRequirements) ? p.unmetRequirements : [];
+      const readiness = unmet.length
+        ? `App readiness check — these MUST be resolved before formalizing (do not set readyToFormalize this turn; probe and fill the matching state fields):\n- ${unmet.join("\n- ")}`
+        : `App readiness check — no blockers reported. If the focus goals are concrete you may hand off (readyToFormalize).`;
+      return `Current onboarding state: ${JSON.stringify(p.state ?? null)}\n\n` +
+        `Latest user message: ${JSON.stringify(p.latestUserText ?? "")}\n\n` +
+        readiness;
+    }
   },
 
   generatePlan: {

@@ -12,7 +12,16 @@ public protocol LLMService: Sendable {
     /// turn (the proxy is stateless); the model returns an updated state, the
     /// coach's next line, and chips. Whether the app may formalize is decided by
     /// `ConcretenessCheck`, not the model's `stage`.
-    func onboardingTurn(state: OnboardingState, latestUserText: String) async throws -> OnboardingTurnResult
+    ///
+    /// `unmetRequirements` carries the app's authoritative readiness verdict —
+    /// the concrete gaps still blocking formalization (e.g. "needs: cadence,
+    /// capacity"). When non-empty, the goal is NOT ready regardless of what the
+    /// model believes; the model must probe exactly those gaps and fill the
+    /// corresponding state fields. This closes the override-discipline loop:
+    /// the model can't escape the probe by optimistically flagging `stage`.
+    func onboardingTurn(state: OnboardingState,
+                        latestUserText: String,
+                        unmetRequirements: [String]) async throws -> OnboardingTurnResult
 
     /// Goal decomposition (use #2).
     func generatePlan(spec: GoalSpec, profile: ConstraintProfile) async throws -> PlanProposal

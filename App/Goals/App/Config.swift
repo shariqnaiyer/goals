@@ -16,4 +16,18 @@ enum Config {
     }
 
     static var usingLiveBackend: Bool { llmProxyBaseURL != nil }
+
+    /// Google OAuth iOS client ID, injected via `Secrets.xcconfig` (also read by
+    /// the GoogleSignIn SDK from the `GIDClientID` plist key). Nil when not
+    /// configured — the Google Calendar integration then shows "setup required".
+    static var googleClientID: String? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String,
+              !raw.isEmpty,
+              !raw.contains("$(") else { // unsubstituted xcconfig placeholder
+            return nil
+        }
+        return raw
+    }
+
+    static var googleSignInAvailable: Bool { googleClientID != nil }
 }

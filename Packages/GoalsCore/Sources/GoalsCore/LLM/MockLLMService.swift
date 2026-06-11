@@ -17,7 +17,8 @@ public struct MockLLMService: LLMService {
     /// turn, inferring the rest) → readyToFormalize. Swift's `ConcretenessCheck`,
     /// not this code, is authoritative about whether formalizing is allowed.
     public func onboardingTurn(state: OnboardingState,
-                               latestUserText: String) async throws -> OnboardingTurnResult {
+                               latestUserText: String,
+                               unmetRequirements: [String] = []) async throws -> OnboardingTurnResult {
         var s = state
         s.turnCount += 1
         let text = latestUserText.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import GoalsCore
+import GoogleSignIn
 #if canImport(UserNotifications)
 import UserNotifications
 #endif
@@ -33,11 +34,17 @@ struct GoalsApp: App {
         WindowGroup {
             RootView()
                 .environment(app)
+                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
                 .task {
                     guard !didBootstrap else { return }
                     didBootstrap = true
                     NotificationCoordinator.shared.configure(app: app)
                     app.bootstrap()
+                    // Async: restore Google sign-in, refresh the busy-time
+                    // cache, and reschedule only if the calendar changed.
+                    // bootstrap() above already scheduled from the local cache,
+                    // so launch stays fully offline-capable.
+                    await app.integrations.refreshImportsAndRescheduleIfChanged()
                 }
         }
         .modelContainer(container)

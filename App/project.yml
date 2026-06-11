@@ -12,6 +12,9 @@ options:
 packages:
   GoalsCore:
     path: ../Packages/GoalsCore
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 8.0.0
 
 settings:
   base:
@@ -39,6 +42,8 @@ targets:
       - path: Goals
     dependencies:
       - package: GoalsCore
+      - package: GoogleSignIn
+        product: GoogleSignIn
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.shariqnaiyer.goals

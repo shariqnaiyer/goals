@@ -19,6 +19,20 @@
     <!-- Read by Config.llmProxyBaseURL; empty → app uses the offline mock LLM. -->
     <key>LLMProxyBaseURL</key>
     <string>$(LLM_PROXY_BASE_URL)</string>
+    <!-- Google Sign-In: client ID + callback scheme, injected via Secrets.xcconfig.
+         Absent → unsubstituted placeholder → Config.googleSignInAvailable == false
+         and the integration shows as "setup required" (mirrors the LLM proxy). -->
+    <key>GIDClientID</key>
+    <string>$(GOOGLE_OAUTH_CLIENT_ID)</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>$(GOOGLE_OAUTH_REVERSED_CLIENT_ID)</string>
+            </array>
+        </dict>
+    </array>
     <key>NSCalendarsUsageDescription</key>
     <string>Goals schedules your tasks around your existing calendar events.</string>
     <key>NSHealthShareUsageDescription</key>

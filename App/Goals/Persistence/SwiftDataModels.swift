@@ -156,6 +156,50 @@ final class SDAppState {
     }
 }
 
+@Model
+final class SDIntegration {
+    @Attribute(.unique) var id: String   // IntegrationKind.rawValue
+    var isConnected: Bool
+    var payload: Data
+
+    init(state: IntegrationState) {
+        self.id = state.kind.rawValue
+        self.isConnected = state.isConnected
+        self.payload = JSON.encode(state)
+    }
+    var domain: IntegrationState? { JSON.decode(IntegrationState.self, from: payload) }
+}
+
+@Model
+final class SDSyncedEvent {
+    @Attribute(.unique) var eventID: String
+    var occurrenceID: UUID
+    var dayKey: Int
+    var payload: Data
+
+    init(record: SyncedEventRecord) {
+        self.eventID = record.eventID
+        self.occurrenceID = record.occurrenceID
+        self.dayKey = DayKey.make(record.day)
+        self.payload = JSON.encode(record)
+    }
+    var domain: SyncedEventRecord? { JSON.decode(SyncedEventRecord.self, from: payload) }
+}
+
+@Model
+final class SDBusyCache {
+    @Attribute(.unique) var id: String   // IntegrationKind.rawValue
+    var fetchedAt: Date
+    var payload: Data
+
+    init(kind: IntegrationKind, cache: CachedBusyWindows, fetchedAt: Date) {
+        self.id = kind.rawValue
+        self.fetchedAt = fetchedAt
+        self.payload = JSON.encode(cache)
+    }
+    var domain: CachedBusyWindows? { JSON.decode(CachedBusyWindows.self, from: payload) }
+}
+
 /// Shared JSON coder for payloads. ISO dates keep payloads human-readable in the
 /// store and stable across migrations.
 enum JSON {
@@ -180,6 +224,7 @@ enum AppSchema {
     static let models: [any PersistentModel.Type] = [
         SDGoal.self, SDMilestone.self, SDTemplate.self, SDOccurrence.self,
         SDRevision.self, SDChatMessage.self, SDConstraintProfile.self,
-        SDUserProfile.self, SDAppState.self
+        SDUserProfile.self, SDAppState.self,
+        SDIntegration.self, SDSyncedEvent.self, SDBusyCache.self
     ]
 }

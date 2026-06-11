@@ -104,6 +104,8 @@ Most-likely problem spots (no compiler caught these):
 | Notifications | Local digest + per-task reminders + Done/Snooze | ✋ |
 | Proxy | Cloudflare Worker, versioned prompts, structured output | ✋ typecheck not run |
 | Design system | Warm-paper + pine-teal tokens, components, all screens restyled, Welcome flow | ✋ |
+| Integrations framework | Provider protocols + registry (`IntegrationService`), catalog with coming-soon entries, Settings → Integrations screens, optional post-plan onboarding card | ✅ builds; manual flow untested |
+| Google Calendar | Two-way: busy-time import → `Scheduler.busyByDay` (offline cache) + export to an app-created "Goals" calendar (`CalendarSyncPlanner`, churn-free diffing, 18 tests) | ✅ tests green; needs OAuth client to run live |
 
 Legend: ✅ verified · ✋ written but unverified · ⛔ broken/known-bad.
 
@@ -137,8 +139,9 @@ Legend: ✅ verified · ✋ written but unverified · ⛔ broken/known-bad.
 - No CI; no `.xcodeproj` committed (regenerated from `project.yml`).
 
 **Phase 2**
-- EventKit (calendar busy intervals feed the scheduler — `BusyInterval` /
-  `busyByDay` plumbing exists in `Scheduler`, but nothing populates it yet).
+- EventKit / Apple Calendar (listed "coming soon" in the Integrations screen;
+  maps `EKEvent → BusyEvent` and reuses the Google Calendar plumbing —
+  `BusyWindowConverter`, busy cache, `IntegrationService` — unchanged).
 - WidgetKit (next task / today progress, interactive complete).
 - Subscription + paywall (StoreKit 2).
 
@@ -164,10 +167,11 @@ forgiveness principle), social features.
 4. **Eval harness for prompts** (Phase 0 debt): record onboarding transcripts +
    replan scenarios with golden `PlanDiff` outputs; assert validator pass-rate.
    Highest leverage for plan quality.
-5. **EventKit read integration** (Phase 2): request permission contextually,
-   convert events to `BusyInterval`s, populate `Scheduler.Input.busyByDay` in
-   `SchedulingCoordinator`. The scheduler already consumes busy intervals and has
-   a test for it (`testCalendarBusyIntervalsBlockPlacement`).
+5. **Apple Calendar (EventKit) integration** (Phase 2): new
+   `AppleCalendarIntegration: BusyTimeIntegration` mapping `EKEvent → BusyEvent`,
+   register it in `IntegrationService` and flip the catalog entry to
+   `.available` — the converter, cache and scheduler plumbing are already shared
+   with Google Calendar.
 6. **Interactive widget** (Phase 2): a `WidgetKit` extension reading today's
    occurrences (reuse `ScheduleRepository`), with an interactive complete button.
 7. **Cross-goal load balancing**: have `SchedulingCoordinator` schedule all active
