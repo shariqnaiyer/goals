@@ -45,6 +45,31 @@ delegate (`GoalsApp.swift`), `UIBarAppearance.configure()` off-MainActor in
 3. `cd proxy && npm install && npm run typecheck`.
 4. Update the "Verified" column below as you go.
 
+---
+
+## ✅ Onboarding redesign — implemented (the "Guided Discovery Interview")
+
+The thin 3-turn interview was replaced with a deep, concreteness-driven onboarding
+and the IA to match (58 GoalsCore tests pass; app builds + runs on the simulator).
+
+- **Concrete objects** — `GoalSpecifics` (reading: book + chapters; fitness:
+  program + routines/sets×reps; generic: ordered units), opaque to the Scheduler.
+  A post-scheduler `Sequencer` stamps "Chapter N" / "Workout A" onto sessions.
+- **The interview** — `OnboardingState`/`PersonSketch`/`AspirationDraft` +
+  `onboardingTurn` (replaces `interview`). Swift-owned stages
+  (ground → surface → concretize → confirm → formalize); the deterministic
+  `ConcretenessCheck` gate (not the model) decides when a goal is concrete and
+  enforces a weekly-capacity cap across the 1–3 chosen goals. `MockLLMService` is
+  the offline stage machine; the proxy `onboardingTurn` mirrors it.
+- **IA** — Settings → **You** (the learned `UserProfile`); `GoalDetailView`
+  "Where you are" (chapters / routines); Today shows the concrete slice + a
+  `TaskDetailSheet`; Goals groups by horizon + surfaces backlog; add-goal "+"
+  enters mid-flow. `markUnitComplete` checks off chapters via `PlanEngine`.
+- **Follow-ups:** the deployed proxy still serves the old `interview` task — run
+  `cd proxy && npm run deploy` for the live coach, or use the mock
+  (`LLM_PROXY_BASE_URL=""`). The weekly-review sheet auto-presents on fresh
+  installs and wants a gentler gate.
+
 Most-likely problem spots (no compiler caught these):
 - SwiftData `#Predicate` expressions in `Repositories.swift` (UUID/String/Int
   comparisons, compound predicates).
