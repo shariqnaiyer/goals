@@ -250,6 +250,7 @@ struct GoalAdaptationView: View {
                             onDismiss: { model.rejectProposal(); dismiss() },
                             onChoose: result.diff.isQuestionOnly ? { choice in
                                 Task { await model.proposeRevision(userMessage: choice, trigger: trigger) }
+                                return
                             } : nil)
                     } else if let error = model.proposalError {
                         ContentUnavailableView("Couldn't adjust", systemImage: "exclamationmark.bubble",

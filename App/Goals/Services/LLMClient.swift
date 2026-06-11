@@ -131,8 +131,10 @@ struct LLMClient: LLMService {
         }
 
         // The proxy wraps the structured result under "result".
-        struct Wrapper<T: Decodable>: Decodable { let result: T }
-        let wrapper = try JSON.decoder.decode(Wrapper<R>.self, from: data)
+        let wrapper = try JSON.decoder.decode(ResultWrapper<R>.self, from: data)
         return wrapper.result
     }
 }
+
+// Generic types can't be nested in a generic function, so this lives at file scope.
+private struct ResultWrapper<T: Decodable>: Decodable { let result: T }

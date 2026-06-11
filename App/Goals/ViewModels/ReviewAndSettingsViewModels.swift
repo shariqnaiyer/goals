@@ -6,7 +6,12 @@ import GoalsCore
 /// where adaptation becomes visible. Builds a per-goal narrative + optional diff.
 @MainActor
 @Observable
-final class WeeklyReviewViewModel {
+final class WeeklyReviewViewModel: Identifiable {
+    // Identity lets the view present it via `.sheet(item:)`, which (unlike
+    // `.sheet(isPresented:)` + `if let`) guarantees a non-nil model at
+    // content-build time — otherwise the sheet renders blank.
+    nonisolated let id = UUID()
+
     struct GoalReview: Identifiable {
         let goalID: UUID
         let title: String

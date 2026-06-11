@@ -9,7 +9,6 @@ struct TodayView: View {
     @State private var model: TodayViewModel?
     @State private var skipTarget: TodayViewModel.Item?
     @State private var reviewModel: WeeklyReviewViewModel?
-    @State private var showReview = false
 
     var body: some View {
         NavigationStack {
@@ -21,16 +20,15 @@ struct TodayView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        let m = WeeklyReviewViewModel(app: app)
-                        reviewModel = m; showReview = true
+                        reviewModel = WeeklyReviewViewModel(app: app)
                     } label: {
                         Image(systemName: "calendar")
                     }
                     .accessibilityLabel("Your week")
                 }
             }
-            .sheet(isPresented: $showReview) {
-                if let reviewModel { WeeklyReviewView(model: reviewModel) }
+            .sheet(item: $reviewModel) { model in
+                WeeklyReviewView(model: model)
             }
         }
         .onAppear {

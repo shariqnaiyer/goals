@@ -72,8 +72,10 @@ async function callClaude(env: Env, body: RequestBody, spec: typeof SPECS[Task])
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 4000,
-      thinking: { type: "adaptive" },
-      output_config: { effort: "medium" },
+      // NOTE: extended thinking is incompatible with a forced tool_choice
+      // ("Thinking may not be enabled when tool_choice forces tool use").
+      // The app depends on schema-valid structured output (single-tool
+      // tool_choice, below), so thinking is intentionally left off.
       system: spec.system + repairNote,
       tools: [spec.tool],
       tool_choice: { type: "tool", name: spec.tool.name },

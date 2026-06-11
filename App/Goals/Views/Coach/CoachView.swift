@@ -48,7 +48,7 @@ struct CoachView: View {
                     diff: diff,
                     onAccept: diff.isQuestionOnly ? nil : { model.applyDiff(diff) },
                     onDismiss: diff.isQuestionOnly ? nil : { model.dismissDiff(diff) },
-                    onChoose: diff.isQuestionOnly ? { Task { await model.send($0) } } : nil)
+                    onChoose: diff.isQuestionOnly ? { choice in Task { await model.send(choice) } } : nil)
             }
         }
     }

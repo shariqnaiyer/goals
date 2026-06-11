@@ -115,7 +115,7 @@ struct TemplateEditor: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Save") { onSave(template); dismiss() } }
-                ToolbarItem(placement: .cancelAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
         }
         .presentationDetents([.medium])

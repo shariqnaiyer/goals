@@ -7,7 +7,6 @@ import GoalsCore
 struct RootView: View {
     @Environment(AppContainer.self) private var app
     @State private var phase: Phase = .welcome
-    @State private var showReview = false
 
     enum Phase { case welcome, onboarding, main }
 
@@ -19,7 +18,7 @@ struct RootView: View {
             case .onboarding:
                 OnboardingView(onFinished: { phase = .main })
             case .main:
-                MainTabView(showReview: $showReview)
+                MainTabView()
             }
         }
         .tint(Palette.accent)
@@ -32,7 +31,6 @@ struct RootView: View {
 
 struct MainTabView: View {
     @Environment(AppContainer.self) private var app
-    @Binding var showReview: Bool
     @State private var reviewModel: WeeklyReviewViewModel?
 
     var body: some View {
@@ -47,15 +45,16 @@ struct MainTabView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .task {
+            // Auto-present the weekly review only when it's due and has content.
+            // Setting reviewModel is what drives presentation (.sheet(item:)).
             let model = WeeklyReviewViewModel(app: app)
-            reviewModel = model
             if model.isDue {
                 await model.load()
-                if !model.reviews.isEmpty { showReview = true }
+                if !model.reviews.isEmpty { reviewModel = model }
             }
         }
-        .sheet(isPresented: $showReview) {
-            if let reviewModel { WeeklyReviewView(model: reviewModel) }
+        .sheet(item: $reviewModel) { model in
+            WeeklyReviewView(model: model)
         }
     }
 }
